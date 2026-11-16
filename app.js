@@ -18,7 +18,7 @@
   const load = (u) => cache[u] || (cache[u] = new Promise(res => { const im = new Image(); im.decoding = 'async';
     im.onload = () => { IM[u] = im; res(im); }; im.onerror = () => res(null); im.src = u; }));
   const setFor = (k) => [A(`garden_${k}.jpg`), A(`garden_mask_${k}.png`), A(`night_${k}.jpg`), A(`night_mask_${k}.png`)];
-  const urls = [...setFor(KEY), ...$$('img').map(i => i.getAttribute('src')), ...[0, 1, 2, 3].flatMap(i => [A(`petal${i}.webp`), A(`petal${i}_b4.webp`), A(`petal${i}_b10.webp`)])];
+  const urls = [...setFor(KEY), ...$$('img').map(i => i.getAttribute('src')).filter(Boolean), ...[0, 1, 2, 3].flatMap(i => [A(`petal${i}.webp`), A(`petal${i}_b4.webp`), A(`petal${i}_b10.webp`)])];
   const prog = { v: 0 }, cnt = $('#loader .count'), bar = $('#loader .rule b');
   let loaded = 0;
   const all = Promise.all(urls.map(u => load(u).then(() => { loaded++; gsap.to(prog, { v: loaded / urls.length, duration: .6, overwrite: true }); })))
