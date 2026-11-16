@@ -158,7 +158,8 @@
 
     // intro: envelope enters
     const env = document.getElementById('envelope');
-    gsap.from(env.querySelectorAll('.env-in'), { opacity: 0, y: 26, duration: 1.4, stagger: .12, ease: 'power3.out', delay: .3 });
+    gsap.to(env, { opacity: 1, duration: 1.2, ease: 'power2.out', delay: .2 });
+    gsap.from(env.querySelectorAll('.bow, .env-fl'), { scale: .92, duration: 1.6, ease: 'power3.out', delay: .2 });
     gsap.from(env.querySelectorAll('.env-name'), { opacity: 0, y: 12, filter: 'blur(6px)', duration: 1.4, stagger: .25, delay: .9 });
 
     let opened = false;
