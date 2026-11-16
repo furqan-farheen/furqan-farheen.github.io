@@ -25,7 +25,7 @@ body::before {
   filter: blur(28px) brightness(.42) saturate(1.15);
 }
 body {
-  background: var(--night);
+  background: transparent;
   color: var(--text); font-family: 'Corm', Georgia, serif; overflow-x: hidden;
   -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
 }
