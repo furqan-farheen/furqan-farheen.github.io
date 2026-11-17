@@ -1,6 +1,7 @@
 /* Furqan & Farheen — immersive invitation
- * Liquid-paint WebGL (touch ripples, scroll smear, paint-flood reveal) · silk envelope opening ·
- * smooth scroll (Lenis) · masked line reveals (GSAP) · drawn gold line-work · petals & gold dust with depth.
+ * Liquid-paint WebGL per scene (touch ripples, scroll smear, paint-flood reveal) · silk envelope opening ·
+ * per-event chapters (Mehndi · Barat · Walima) · smooth scroll (Lenis) · masked reveals (GSAP) ·
+ * drawn gold line-work · three.js petals themed per event (petals3d.js).
  */
 (function () {
   'use strict';
@@ -12,13 +13,14 @@
   const aspectKey = () => { const a = innerWidth / innerHeight; return a < 0.62 ? 'p' : a < 1.05 ? 't' : 'l'; };
   let KEY = aspectKey();
   const A = (n) => `assets/r/${n}`;
+  const SCENES = $$('canvas.paint').map(c => c.dataset.scene);
 
   /* ------------------------------------------------------------ preload */
   const cache = {}, IM = {};
   const load = (u) => cache[u] || (cache[u] = new Promise(res => { const im = new Image(); im.decoding = 'async';
     im.onload = () => { IM[u] = im; res(im); }; im.onerror = () => res(null); im.src = u; }));
-  const setFor = (k) => [A(`garden_${k}.jpg`), A(`garden_mask_${k}.png`), A(`night_${k}.jpg`), A(`night_mask_${k}.png`)];
-  const urls = [...setFor(KEY), ...$$('img').map(i => i.getAttribute('src')).filter(Boolean), ...[0, 1, 2, 3].flatMap(i => [A(`petal${i}.webp`), A(`petal${i}_b4.webp`), A(`petal${i}_b10.webp`)])];
+  const setFor = (k) => SCENES.flatMap(s => [A(`${s}_${k}.jpg`), A(`${s}_mask_${k}.png`)]);
+  const urls = [...setFor(KEY), ...$$('img').map(i => i.getAttribute('src')).filter(Boolean)];
   const prog = { v: 0 }, cnt = $('#loader .count'), bar = $('#loader .rule b');
   let loaded = 0;
   const all = Promise.all(urls.map(u => load(u).then(() => { loaded++; gsap.to(prog, { v: loaded / urls.length, duration: .6, overwrite: true }); })))
@@ -110,6 +112,7 @@
       const sc = ca > ia ? [1, ia / ca] : [ca / ia, 1]; return [(fx - .5) / sc[0] + .5, (fy - .5) / sc[1] + .5]; }
   }
 
+
   /* --------------------------------------------------------- geometry */
   function cuspedArch(cx, base, w, h, springFrac = .7, cusps = 9, depth = .028, n = 260) {
     const hs = h * springFrac, ha = h - hs, spy = base - hs, hw = w / 2, e = hw * .35, R = hw + e;
@@ -125,17 +128,14 @@
   }
   const pathD = (pts, close) => 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L') + (close ? 'Z' : '');
 
-  function buildArch() {
-    const box = $('.arch'), svg = $('.arch svg.paper'); const w = box.clientWidth, h = box.clientHeight;
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    const outer = cuspedArch(w / 2, h, w, h, .70, 9, .028);
-    const inner = cuspedArch(w / 2, h - w * .03, w * .92, h - w * .07, .70, 9, .028);
-    $('#archPaper').setAttribute('d', pathD(outer, true));
-    $('#archLip').setAttribute('d', pathD(outer, true));
-    $('#archGold').setAttribute('d', pathD(inner.slice(1, -1), false));
-    $('#archGold').setAttribute('stroke-width', Math.max(.8, w * .0035));
+  function buildArches() {
+    $$('.arch').forEach(box => { const svg = $('svg.paper', box); const w = box.clientWidth, h = box.clientHeight; if (!w) return;
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      const outer = cuspedArch(w / 2, h, w, h, .70, 9, .028);
+      const inner = cuspedArch(w / 2, h - w * .03, w * .92, h - w * .07, .70, 9, .028);
+      $$('.a-fill, .a-lip, .a-clip', svg).forEach(p => p.setAttribute('d', pathD(outer, true)));
+      const g = $('.a-gold', svg); g.setAttribute('d', pathD(inner.slice(1, -1), false)); g.setAttribute('stroke-width', Math.max(.8, w * .0035)); });
   }
-
   function buildFrame() {
     const card = $('#s-rsvp .card'), svg = $('#s-rsvp svg.frame'); const w = card.clientWidth, h = card.clientHeight;
     svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
@@ -155,7 +155,6 @@
     html += `<path class="leaf" d="M${w / 2} ${-24} L${w / 2 + 6} ${-9} L${w / 2} ${-1} L${w / 2 - 6} ${-9}Z"/>`;
     svg.innerHTML = html;
   }
-
   /* ---------------------------------------------------------- text fx */
   function splitChars(el) { const s = el.textContent; el.textContent = ''; el.setAttribute('aria-label', s);
     return [...s].map(ch => { const sp = document.createElement('span'); sp.textContent = ch === ' ' ? ' ' : ch; sp.style.display = 'inline-block';
@@ -181,79 +180,42 @@
     return tl;
   }
 
-  /* ----------------------------------------------------------- fx canvas */
-  function fx() {
-    const cv = $('#fx'), ctx = cv.getContext('2d'); let W, H, d;
-    const size = () => { d = Math.min(devicePixelRatio || 1, 2); W = cv.width = innerWidth * d; H = cv.height = innerHeight * d; };
-    size(); addEventListener('resize', size);
-    const sp = (n) => IM[A(n)];
-    const sharp = [0, 1, 2, 3], P = [], D = [];
-    const small = innerWidth < 700;
-    // three depth planes: far (soft, small, slow) · mid (sharp) · near (large, very soft, fast, rare)
-    const planes = [{ n: small ? 5 : 8, z: .38, blur: 4 }, { n: small ? 5 : 7, z: .7, blur: 0 }, { n: small ? 1 : 2, z: 1.5, blur: 10 }];
-    const make = (pl, top) => ({ pl, z: pl.z * (0.85 + Math.random() * .3), x: Math.random() * W, y: top ? -80 * d : Math.random() * H,
-      vx: (.15 + Math.random() * .35) * d, vy: (.25 + Math.random() * .35) * d, r: Math.random() * 6.3, vr: (Math.random() - .5) * .012,
-      fl: Math.random() * 6.3, vf: .008 + Math.random() * .02, w: Math.random() * 6.3, k: sharp[(Math.random() * 4) | 0] });
-    planes.forEach(pl => { for (let i = 0; i < pl.n; i++) P.push(make(pl, false)); });
-    for (let i = 0; i < (small ? 26 : 46); i++) D.push({ x: Math.random(), y: Math.random(), s: .5 + Math.random() * 1.6, p: Math.random() * 6.3, v: .2 + Math.random() * .6 });
-    const mote = document.createElement('canvas'); mote.width = mote.height = 32; const mc = mote.getContext('2d');
-    const g = mc.createRadialGradient(16, 16, 0, 16, 16, 16); g.addColorStop(0, 'rgba(255,236,190,1)'); g.addColorStop(.25, 'rgba(232,200,130,.55)'); g.addColorStop(1, 'rgba(232,200,130,0)');
-    mc.fillStyle = g; mc.fillRect(0, 0, 32, 32);
-    let gust = 0, last = performance.now(); state.fx = { petals: 0, dust: 1 };
-    const loop = (now) => {
-      const dt = Math.min(3, (now - last) / 16.7); last = now; const T = now / 1000; ctx.clearRect(0, 0, W, H);
-      gust = .5 + .5 * Math.sin(T * .23) * Math.sin(T * .11 + 1.3);
-      // dust
-      ctx.globalCompositeOperation = 'lighter';
-      for (const m of D) { m.y -= .00012 * m.v * dt; m.x += Math.sin(T * .3 + m.p) * .00008 * dt; if (m.y < -.02) { m.y = 1.02; m.x = Math.random(); }
-        const tw = .35 + .65 * Math.pow(.5 + .5 * Math.sin(T * (0.6 + m.v) + m.p * 3), 3);
-        const s = (4 + m.s * 5) * d; ctx.globalAlpha = tw * .55 * state.fx.dust; ctx.drawImage(mote, m.x * W - s / 2, m.y * H - s / 2, s, s); }
-      ctx.globalCompositeOperation = 'source-over';
-      if (state.fx.petals > 0) for (const p of P) {
-        p.w += .015 * dt; p.fl += p.vf * dt; p.r += p.vr * dt;
-        p.x += (p.vx * (1 + gust * 1.6) + Math.sin(p.w) * .4 * d) * p.z * dt; p.y += (p.vy + Math.cos(p.w * .7) * .15 * d) * p.z * dt;
-        if (p.y > H + 90 * d || p.x > W + 90 * d) Object.assign(p, make(p.pl, true), { x: Math.random() * W * .9 - W * .2 });
-        const im = sp(p.pl.blur ? `petal${p.k}_b${p.pl.blur}.webp` : `petal${p.k}.webp`); if (!im) continue;
-        const base = (small ? 22 : 30) * d * p.z, sx = Math.cos(p.fl), sy = .75 + .25 * Math.sin(p.fl * .7);
-        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.scale(sx, sy);
-        ctx.globalAlpha = state.fx.petals * (p.pl.z > 1 ? .55 : p.pl.z < .5 ? .6 : .92) * (.7 + .3 * Math.abs(sx));
-        ctx.drawImage(im, -base / 2, -base / 2 * 1.15, base, base * 1.15); ctx.restore(); }
-      requestAnimationFrame(loop);
-    };
-    if (!reduce) requestAnimationFrame(loop);
-  }
-  const state = {};
-
   /* -------------------------------------------------------------- main */
+  const fx = { theme: (n) => window.FX3D && window.FX3D.setTheme(n), level: (v) => window.FX3D && window.FX3D.setLevel(v) };
+  const OPTS = { garden: { reveal: 1, sheen: .1 }, night: { reveal: 0, sheen: .16, base: [0.043, 0.141, 0.122] },
+    mehndi: { reveal: 0, sheen: .14, base: [0.23, 0.11, 0.2] }, barat: { reveal: 0, sheen: .1, base: [0.97, 0.95, 0.91] },
+    walima: { reveal: 0, sheen: .16, base: [0.92, 0.86, 0.77] } };
+
   all.then(async () => {
     const lenis = new Lenis({ lerp: .085, smoothWheel: true, syncTouch: false });
     lenis.stop(); lenis.on('scroll', ScrollTrigger.update);
     gsap.ticker.add(t => lenis.raf(t * 1000)); gsap.ticker.lagSmoothing(0);
 
-    const G = new Liquid($('#gl-garden'), { reveal: 1, sheen: .1 });
-    const N = new Liquid($('#gl-night'), { reveal: 0, sheen: .16, base: [0.043, 0.141, 0.122] });
-    const apply = async () => { const [g, gm, n, nm] = await Promise.all(setFor(KEY).map(load));
-      G.setImages(g, gm); N.setImages(n, nm);
-      $('#fb-garden').src = A(`garden_${KEY}.jpg`); $('#fb-night').src = A(`night_${KEY}.jpg`);
+    const LQ = {};
+    $$('canvas.paint').forEach(c => { const L = new Liquid(c, { ...(OPTS[c.dataset.scene] || {}) }); if (!L.ok) c.remove(); LQ[c.dataset.scene] = L; });
+    const G = LQ.garden;
+    const placeGlows = () => $$('.glows').forEach(wrap => { const s = wrap.dataset.scene, L = LQ[s]; wrap.innerHTML = '';
+      if (!L || !L.img) return;
+      (window.LIGHTS[`${s}_${KEY}`] || []).forEach(([fx_, fy, w], i) => { const [x, y] = L.map(fx_, fy); if (x < -.05 || x > 1.05 || y < -.05 || y > 1.05) return;
+        const el = document.createElement('i'); el.className = 'glow'; const sz = (w >= 1 ? 15 : w >= .6 ? 9 : 6) * (0.6 + .4 * Math.min(1, w));
+        Object.assign(el.style, { left: x * 100 + '%', top: y * 100 + '%', width: sz + 'vmin', height: sz + 'vmin', animationDuration: (2.2 + (i * .37) % 1.8) + 's', animationDelay: -((i * .61) % 2) + 's' });
+        wrap.appendChild(el); }); });
+    const apply = async () => {
+      await Promise.all(SCENES.map(async s => { const [im, mk] = await Promise.all([load(A(`${s}_${KEY}.jpg`)), load(A(`${s}_mask_${KEY}.png`))]);
+        if (LQ[s]) LQ[s].setImages(im, mk); const fb = $(`img.paint-fallback[data-scene="${s}"]`); if (fb) fb.src = A(`${s}_${KEY}.jpg`); }));
       $$('#s-rsvp .strip img.sky').forEach(i => i.src = A(`strip_${KEY}.webp`)); placeGlows(); };
-    const placeGlows = () => { const wrap = $('#glows'); if (!N.img) return; wrap.innerHTML = '';
-      (window.LIGHTS[KEY] || []).forEach(([fx, fy, w], i) => { const [x, y] = N.map(fx, fy); if (x < -.05 || x > 1.05) return;
-        const el = document.createElement('i'); el.className = 'glow'; const s = (w >= 1 ? 15 : 7) * (0.6 + .4 * w);
-        Object.assign(el.style, { left: x * 100 + '%', top: y * 100 + '%', width: s + 'vmin', height: s + 'vmin', animationDuration: (2.2 + (i * .37) % 1.8) + 's', animationDelay: -((i * .61) % 2) + 's' });
-        wrap.appendChild(el); }); };
-    if (!G.ok) $('#gl-garden').remove(); if (!N.ok) $('#gl-night').remove();
     await apply();
-    buildArch(); buildFrame();
-    let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { buildArch(); buildFrame(); const k = aspectKey();
+    buildArches(); buildFrame();
+    let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { buildArches(); buildFrame(); const k = aspectKey();
       if (k !== KEY) { KEY = k; apply(); } else placeGlows(); ScrollTrigger.refresh(); }, 160); });
 
-    // pointer ripples on the paint
-    const ripple = (e, s) => { [G, N].forEach(L => { if (!L.ok) return; const r = L.c.getBoundingClientRect();
-      if (e.clientY < r.top || e.clientY > r.bottom) return; L.drop((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, s); }); };
+    // pointer ripples on whichever painting is under the finger
+    const ripple = (e, s) => Object.values(LQ).forEach(L => { if (!L.ok) return; const r = L.c.getBoundingClientRect();
+      if (e.clientY < r.top || e.clientY > r.bottom) return; L.drop((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, s); });
     let lastDrop = 0; addEventListener('pointermove', e => { const t = performance.now(); if (t - lastDrop > 90) { lastDrop = t; ripple(e, .35); } }, { passive: true });
     addEventListener('pointerdown', e => ripple(e, 1), { passive: true });
-    lenis.on('scroll', ({ velocity }) => { const v = Math.max(-1, Math.min(1, velocity / 40)); G.vel = N.vel = v; });
-    gsap.ticker.add(() => { G.vel *= .92; N.vel *= .92; });
+    lenis.on('scroll', ({ velocity }) => { const v = Math.max(-1, Math.min(1, velocity / 40)); Object.values(LQ).forEach(L => L.vel = v); });
+    gsap.ticker.add(() => Object.values(LQ).forEach(L => L.vel *= .92));
 
     // cursor
     if (fine) { const c = $('#cursor'), ring = $('#cursor-ring'), pos = { x: innerWidth / 2, y: innerHeight / 2 }, rp = { ...pos };
@@ -262,63 +224,64 @@
       document.addEventListener('pointerover', e => { const t = e.target.closest('a, button, .tap'); ring.classList.toggle('big', !!t);
         ring.querySelector('.lbl').textContent = t ? (t.dataset.cursor || '') : ''; }); }
 
-    // parallax: corners drift with pointer & scroll
+    // parallax
     if (!reduce) {
-      $$('.corner').forEach((el, i) => { const sec = el.closest('section') || el.closest('#intro');
-        if (sec && sec.tagName === 'SECTION') gsap.fromTo(el, { y: 0 }, { y: () => (el.classList.contains('tl') || el.classList.contains('tr') ? -1 : 1) * innerHeight * .06, ease: 'none',
+      $$('section .corner').forEach(el => { const sec = el.closest('section');
+        gsap.fromTo(el, { y: 0 }, { y: () => (el.classList.contains('tl') || el.classList.contains('tr') ? -1 : 1) * innerHeight * .06, ease: 'none',
           scrollTrigger: { trigger: sec, start: 'top top', end: 'bottom top', scrub: true } }); });
       if (fine) { const qs = $$('#s-invite .corner, #card').map(el => ({ el, k: el.id === 'card' ? -6 : 14 }));
         addEventListener('pointermove', e => { const nx = e.clientX / innerWidth - .5, ny = e.clientY / innerHeight - .5;
           qs.forEach(({ el, k }) => gsap.to(el, { x: nx * k, y: ny * k, duration: 1.4, ease: 'power3.out', overwrite: 'auto' })); }); }
-      gsap.fromTo('#gl-night, #fb-night', { yPercent: -6 }, { yPercent: 6, ease: 'none', scrollTrigger: { trigger: '#s-night', start: 'top bottom', end: 'bottom top', scrub: true } });
+      $$('section.scene:not(#s-invite)').forEach(sec => gsap.fromTo($$('canvas.paint, img.paint-fallback', sec), { yPercent: -5 }, { yPercent: 5, ease: 'none',
+        scrollTrigger: { trigger: sec, start: 'top bottom', end: 'bottom top', scrub: true } }));
     }
 
     const heroTL = reveals($('#s-invite'), { manual: true });
-    ['#s-details', '#s-night', '#s-rsvp'].forEach(s => reveals($(s)));
-    ScrollTrigger.create({ trigger: '#s-night', start: 'top 75%', once: true, onEnter: () => gsap.to(N, { reveal: 1, duration: reduce ? 0 : 3.4, ease: 'power1.inOut' }) });
+    $$('main > section:not(#s-invite)').forEach(s => reveals(s));
+    // paint floods in as each scene arrives; petals follow the chapter's theme
+    $$('section.scene:not(#s-invite)').forEach(sec => { const c = $('canvas.paint', sec); const L = c && LQ[c.dataset.scene];
+      if (L && L.ok) ScrollTrigger.create({ trigger: sec, start: 'top 80%', once: true, onEnter: () => gsap.to(L, { reveal: 1, duration: reduce ? 0 : 3.2, ease: 'power1.inOut' }) }); });
+    $$('main > section[data-theme]').forEach(sec => ScrollTrigger.create({ trigger: sec, start: 'top 55%', end: 'bottom 55%',
+      onToggle: st => { if (st.isActive) fx.theme(sec.dataset.theme); } }));
     ScrollTrigger.create({ trigger: '#s-rsvp .card', start: 'top 75%', once: true, onEnter: () => drawPaths($('#s-rsvp svg.frame'), 3.2) });
-    gsap.set('#s-rsvp svg.frame', { opacity: 1 });
-    ScrollTrigger.create({ trigger: '#s-night', start: 'top 60%', end: 'bottom top', onToggle: s => gsap.to(state.fx, { dust: s.isActive ? 2 : 1, duration: 1.5 }) });
 
-    fx();
-    // hero pieces hidden until the envelope opens
-    gsap.set(['.arch', '#s-invite .corner'], { opacity: 0 });
+    gsap.set(['#s-invite .arch', '#s-invite .corner'], { opacity: 0 });
 
     // -------- loader out, envelope in
     const card = $('#card');
     gsap.set(card, { opacity: 0, scale: .94 });
-    const intro = gsap.timeline();
-    intro.to('#loader .in', { opacity: 0, y: -10, duration: .6, ease: 'power2.in' })
+    gsap.timeline()
+      .to('#loader .in', { opacity: 0, y: -10, duration: .6, ease: 'power2.in' })
       .to('#loader', { clipPath: 'inset(0 0 100% 0)', duration: 1.2, ease: 'expo.inOut' }, .4)
       .add(() => $('#loader').remove())
       .to(card, { opacity: 1, scale: 1, duration: 1.8, ease: 'expo.out' }, 1.0)
       .from($$('#card .n, #card .a, #card .cel, #card .ur, #card .orn'), { opacity: 0, y: 14, filter: 'blur(6px)', duration: 1.4, stagger: .1, ease: 'power3.out' }, 1.6)
       .from('#card .hint', { opacity: 0, duration: 1 }, 2.4);
+    const fxInit = () => { fx.theme('garden'); fx.level(.25); };
+    window.FX3D ? fxInit() : addEventListener('fx3d-ready', fxInit, { once: true });
 
     let opened = false;
     const open = () => {
       if (opened) return; opened = true;
       $$('#card .halo, #card .sway').forEach(el => el.style.animation = 'none');
-      G.drop(.5, .38, 1.6);
+      if (G) G.drop(.5, .38, 1.6);
       const tl = gsap.timeline({ defaults: { ease: 'power3.inOut' } });
       tl.to('#card .hint, #card .halo', { opacity: 0, duration: .4 })
-        // the bow loosens, then slips off
         .to('#card .bow', { scaleX: 1.06, scaleY: .96, duration: .35, ease: 'sine.inOut' }, 0)
         .to('#card .bow', { y: '-3%', scale: .55, rotate: -14, opacity: 0, filter: 'blur(4px)', duration: 1.0, ease: 'power3.in' }, .3)
         .to('#card .rib-l', { xPercent: -60, opacity: 0, duration: 1.3, ease: 'power3.in' }, .55)
         .to('#card .rib-r', { xPercent: 60, opacity: 0, duration: 1.3, ease: 'power3.in' }, .55)
-        // flap folds back in 3D
         .to('#card .flap', { rotateX: 178, duration: 1.4, ease: 'power2.inOut' }, 1.3)
         .to('#card .flap', { opacity: 0, duration: .4 }, 2.4)
         .to('#card .txtgrp', { opacity: 0, y: -20, filter: 'blur(6px)', duration: .9 }, 1.8)
         .to('#card .env-fl', { opacity: 0, scale: 1.12, duration: 1.2 }, 2.0)
         .to(card, { yPercent: 75, rotate: 3, opacity: 0, duration: 1.6, ease: 'power3.in' }, 2.3)
         .to('#intro .veil', { opacity: 0, duration: 1.2 }, 2.6)
-        .add(() => { G.reveal = 0; G.drop(.5, .5, 2.2); }, 3.0)
-        .to(G, { reveal: 1, duration: reduce ? 0 : 3.6, ease: 'power1.inOut' }, 3.0)
-        .fromTo('.arch', { opacity: 0, clipPath: 'circle(0% at 50% 45%)' }, { opacity: 1, clipPath: 'circle(85% at 50% 45%)', duration: 2.6, ease: 'expo.inOut' }, 3.8)
+        .add(() => { if (G) { G.reveal = 0; G.drop(.5, .5, 2.2); } }, 3.0)
+        .to(G || {}, { reveal: 1, duration: reduce ? 0 : 3.6, ease: 'power1.inOut' }, 3.0)
+        .fromTo('#s-invite .arch', { opacity: 0, clipPath: 'circle(0% at 50% 45%)' }, { opacity: 1, clipPath: 'circle(85% at 50% 45%)', duration: 2.6, ease: 'expo.inOut' }, 3.8)
         .fromTo('#s-invite .corner', { opacity: 0, scale: .8 }, { opacity: 1, scale: 1, duration: 2.6, stagger: .12, ease: 'expo.out' }, 4.2)
-        .add(() => { heroTL.play(); gsap.to(state.fx, { petals: 1, duration: 4 }); }, 4.6)
+        .add(() => { heroTL.play(); fx.level(1); }, 4.6)
         .add(() => { $('#intro').remove(); document.body.classList.remove('locked'); lenis.start(); ScrollTrigger.refresh(); }, 5.2)
         .to('.cue', { opacity: 1, duration: 1.2 }, 7.2);
       if (reduce) tl.timeScale(5);
@@ -326,6 +289,6 @@
     $('#card .tap').addEventListener('click', open);
     $('#intro').addEventListener('click', e => { if (!e.target.closest('.tap')) open(); });
     addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') open(); });
-    $('.cue').addEventListener('click', () => lenis.scrollTo('#s-details', { duration: 2 }));
+    $('.cue').addEventListener('click', () => lenis.scrollTo($('#s-invite').nextElementSibling, { duration: 2 }));
   });
 })();
