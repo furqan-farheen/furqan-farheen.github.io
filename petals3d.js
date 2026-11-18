@@ -23,6 +23,7 @@ let renderer = null;
 try { if (canvas && !reduce) renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !small, powerPreference: 'high-performance' }); }
 catch (e) { renderer = null; }          // no WebGL: the painted scenes stay, petals are simply skipped
 if (!renderer && canvas) canvas.style.display = 'none';
+if (renderer) canvas.addEventListener('webglcontextlost', () => { canvas.style.display = 'none'; paused = true; });
 if (renderer) {
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1.25 : 1.6));
   renderer.outputColorSpace = THREE.SRGBColorSpace;

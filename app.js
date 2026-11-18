@@ -91,6 +91,7 @@
       const gl = canvas.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'high-performance' });
       if (!gl) { this.ok = false; return; }
       this.ok = true; this.gl = gl;
+      canvas.addEventListener('webglcontextlost', () => { this.ok = false; this.running = false; canvas.remove(); });
       const sh = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s);
         if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s)); return s; };
       const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FS));
@@ -161,16 +162,24 @@
       [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.LINEAR));
       [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE));
       img.after(c); img.style.visibility = 'hidden'; this.ok = true; cloths.add(this);
-      this.resize(); addEventListener('resize', () => this.resize());
-      new IntersectionObserver(es => es.forEach(e => { this.visible = e.isIntersecting; e.isIntersecting && !still ? this.start() : this.stop(); })).observe(c);
-      document.addEventListener('visibilitychange', () => document.hidden ? this.stop() : this.visible && !still && this.start());
+      this.onR = () => this.resize(); this.onV = () => document.hidden ? this.stop() : this.start();
+      addEventListener('resize', this.onR); document.addEventListener('visibilitychange', this.onV);
+      c.addEventListener('webglcontextlost', () => dropCloth(img));
+      this.resize();
     }
     resize() { const d = Math.min(devicePixelRatio || 1, 2), w = this.img.clientWidth, h = this.img.clientHeight; if (!w) return;
       this.c.width = Math.round(w * d); this.c.height = Math.round(h * d); this.gl.viewport(0, 0, this.c.width, this.c.height); this.draw(); }
     draw() { const gl = this.gl; gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.uniform1f(this.uT, (performance.now() - this.t0) / 1000); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
     start() { if (this.running) return; this.running = true; const loop = () => { if (!this.running) return; this.draw(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
     stop() { this.running = false; }
+    destroy() { this.stop(); removeEventListener('resize', this.onR); document.removeEventListener('visibilitychange', this.onV);
+      const x = this.gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext();
+      this.c.remove(); this.img.style.visibility = ''; cloths.delete(this); }
   }
+  const clothFor = new Map(), clothVis = new Map();
+  const makeCloth = (im) => { if (still || reduce || clothFor.get(im) || !im.naturalWidth) return; const c = new Cloth(im); if (c.ok) { clothFor.set(im, c); c.start(); } };
+  const dropCloth = (im) => { const c = clothFor.get(im); if (c) { c.destroy(); clothFor.delete(im); } };
+  const clothIO = new IntersectionObserver(es => es.forEach(e => { clothVis.set(e.target, e.isIntersecting); e.isIntersecting ? makeCloth(e.target) : dropCloth(e.target); }), { rootMargin: '120px' });
 
   /* --------------------------------------------------------- geometry */
   function cuspedArch(cx, base, w, h, springFrac = .7, cusps = 9, depth = .028, n = 260) {
@@ -279,7 +288,7 @@
         if (LQ[s]) LQ[s].setImages(im, mk); }));
       $$('#s-rsvp .strip img.sky').forEach(i => i.src = A(`strip_${KEY}.webp`)); placeGlows(); };
     await apply();
-    if (!reduce) $$('img.couple').forEach(im => (im.complete ? Promise.resolve() : im.decode().catch(() => {})).then(() => new Cloth(im)));
+    $$('img.couple').forEach(im => (im.complete ? Promise.resolve() : im.decode().catch(() => {})).then(() => clothIO.observe(im)));
     buildArches(); buildFrame();
     let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { buildArches(); buildFrame(); const k = aspectKey();
       if (k !== KEY) { KEY = k; apply(); } else placeGlows(); ScrollTrigger.refresh(); }, 160); });
@@ -395,7 +404,7 @@
       try { localStorage.setItem('ff-still', v ? '1' : '0'); } catch (e) {}
       if (mot) { mot.setAttribute('aria-pressed', String(v)); mot.setAttribute('aria-label', v ? 'Play animation' : 'Pause animation'); }
       if (window.FX3D) window.FX3D.setPaused(v);
-      glints.forEach(t => v ? t.pause() : t.play()); cloths.forEach(c => v ? c.stop() : c.visible && c.start());
+      glints.forEach(t => v ? t.pause() : t.play()); clothVis.forEach((on, im) => v || !on ? dropCloth(im) : makeCloth(im));
       Object.values(LQ).forEach(L => { if (L.ok && L.visible) { L.stop(); L.start(); } }); };
     if (mot) { mot.classList.add('ready'); mot.addEventListener('click', () => setStill(!still)); }
     const fxPause = () => window.FX3D && window.FX3D.setPaused(still);
