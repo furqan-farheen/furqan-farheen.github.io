@@ -108,9 +108,9 @@ section { position: relative; width: 100%; overflow: hidden; }
 @keyframes halo { 0% { scale: .55; opacity: 0; } 30% { opacity: .9; } 100% { scale: 1.45; opacity: 0; } }
 
 /* ------------------------------------------------------------ details */
-#s-details { min-height: 100svh; background: var(--ivory) url(assets/r/ivory_tile.jpg) repeat; background-size: 512px;
+#s-details { min-height: 100svh; background: var(--ivory) url(assets/v3/ivory_tile.jpg) repeat; background-size: 512px;
   padding: clamp(14px, 3.4vmin, 44px); display: flex; }
-#s-details .frame { position: relative; flex: 1; border: solid clamp(24px, 4.4vmin, 50px); border-image: url(assets/r/tileframe.webp) 72 round;
+#s-details .frame { position: relative; flex: 1; border: solid clamp(24px, 4.4vmin, 50px); border-image: url(assets/v3/tileframe.webp) 72 round;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: clamp(96px, 15vmin, 170px) clamp(8px, 4vw, 60px) clamp(80px, 12vmin, 140px); text-align: center; }
 #s-details .corner { width: clamp(150px, 40vmin, 470px); }
@@ -138,7 +138,7 @@ section { position: relative; width: 100%; overflow: hidden; }
 #s-night .orn { width: clamp(70px, 10vmin, 120px); margin: .55em auto 0; display: block; }
 
 /* --------------------------------------------------------------- rsvp */
-#s-rsvp { min-height: 100svh; background: #13403a url(assets/r/emerald_tile.jpg) repeat; background-size: 512px; color: var(--ivory);
+#s-rsvp { min-height: 100svh; background: #13403a url(assets/v3/emerald_tile.jpg) repeat; background-size: 512px; color: var(--ivory);
   display: flex; flex-direction: column; align-items: center; }
 #s-rsvp .card { position: relative; z-index: 2; width: min(90vw, 620px); margin: clamp(30px, 6svh, 70px) auto 0;
   padding: clamp(120px, 18vmin, 180px) clamp(24px, 7vw, 70px) clamp(44px, 7vmin, 70px);
@@ -280,3 +280,34 @@ section.ev .arch { position: relative; z-index: 3; left: auto; top: auto; transf
 
 section.ev { display: block; }
 .ev-stage { width: 100%; }
+
+/* ------------------------------------------- v3: hand-painted artwork layers */
+picture.paint-fallback img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* every envelope PNG shares one canvas: stack them full-size, no per-layer boxes */
+#card .lyr { inset: 0; width: 100%; height: 100%; }
+#card .flap { transform-origin: 50% 6%; backface-visibility: visible; }
+#card .bow { transform-origin: 50% 31.5%; }
+#card .rib-l { transform-origin: 50% 31.5%; } #card .rib-r { transform-origin: 50% 31.5%; }
+#card .env-fl.tl { transform-origin: 9.5% 6%; } #card .env-fl.br { transform-origin: 90.5% 94%; }
+#card .env-fl.sway { animation-duration: 11s; }
+@keyframes sway { from { rotate: -.7deg; } to { rotate: .9deg; } }
+.sway { animation-duration: 10s; } .sway.tr { animation-duration: 11.5s; } .sway.bl { animation-duration: 10.8s; } .sway.br { animation-duration: 9.6s; }
+.corner { width: clamp(130px, 36vmin, 430px); }
+.ev-stage .corner { width: clamp(110px, 28vmin, 360px); z-index: 1; }
+.ev-stage .corner.tl, .ev-stage .corner.tr { width: clamp(100px, 24vmin, 320px); }
+.ev-stage .couple { z-index: 2; }
+#s-rsvp .strip .corner { width: clamp(120px, 28vmin, 340px); }
+html.still .sway, html.still .glow, html.still .halo, html.still .cue i, html.still #sound.on i { animation: none !important; }
+
+#motion { position: fixed; z-index: 60; right: calc(max(14px, env(safe-area-inset-right)) + 56px); bottom: max(14px, env(safe-area-inset-bottom));
+  width: 46px; height: 46px; border-radius: 50%; border: 1px solid rgba(196,164,107,.8); background: rgba(11,36,31,.55); color: var(--gold);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); display: none; place-items: center; cursor: pointer; padding: 0; }
+#motion.ready { display: grid; }
+#motion svg { width: 18px; height: 18px; } #motion .pl { display: none; }
+html.still #motion .pz { display: none; } html.still #motion .pl { display: inline; fill: currentColor; stroke: none; }
+.replay { margin-top: 1.1em; background: none; border: 0; color: var(--goldlt); font-family: 'Corm', serif; font-style: italic; font-size: .95em;
+  display: inline-flex; align-items: center; gap: .5em; cursor: pointer; border-bottom: 1px solid rgba(196,164,107,.4); padding: 0 0 .1em; }
+.replay svg { width: 1.05em; height: 1.05em; }
+#card .env-fl.br { scale: .85; }
+section.ev { display: flow-root; }
+.ev .arch .content { padding-top: 29.5%; }

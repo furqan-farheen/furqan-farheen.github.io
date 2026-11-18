@@ -17,11 +17,14 @@ const THEMES = {
   night: { mix: { rose: .6, jasmine: .4, marigold: 0 }, rose: ['#D9A7A0', '#C98F87'], marigold: ['#E9962E'], spark: '#FFD58A', sparks: 1.3, petals: .35 },
 };
 
-let theme = THEMES.garden, level = 0, levelTarget = 0;
+let theme = THEMES.garden, level = 0, levelTarget = 0, paused = false, wake = null;
 
-if (canvas && !reduce) {
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1.5 : 1.75));
+let renderer = null;
+try { if (canvas && !reduce) renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !small, powerPreference: 'high-performance' }); }
+catch (e) { renderer = null; }          // no WebGL: the painted scenes stay, petals are simply skipped
+if (!renderer && canvas) canvas.style.display = 'none';
+if (renderer) {
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1.25 : 1.6));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, .1, 60);
@@ -32,9 +35,9 @@ if (canvas && !reduce) {
   const back = new THREE.DirectionalLight(0xffd2b4, 1.4); back.position.set(-4, -2, -6); scene.add(back);
 
   // cupped petal geometry
-  const geo = new THREE.PlaneGeometry(1, 1.25, 8, 8);
+  const geo = new THREE.PlaneGeometry(1, 1, 8, 8);
   const p = geo.attributes.position;
-  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, .32 * x * x - .12 * y * y + .05 * y); }
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i); p.setZ(i, .26 * x * x - .1 * y * y + .04 * y); }
   geo.computeVertexNormals();
   const jgeo = new THREE.PlaneGeometry(1, 1, 6, 6);
   const jp = jgeo.attributes.position;
@@ -42,9 +45,9 @@ if (canvas && !reduce) {
   jgeo.computeVertexNormals();
 
   const loader = new THREE.TextureLoader();
-  const tex = (n) => { const t = loader.load(`assets/r/tex_${n}.png`); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
-  const mat = (n) => new THREE.MeshStandardMaterial({ map: tex(n), alphaTest: .42, side: THREE.DoubleSide, roughness: .55, metalness: 0, transparent: false, emissive: 0x000000 });
-  const N = small ? 34 : 70;
+  const tex = (n) => { const t = loader.load(`assets/v3/tex_${n}.png`); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t; };
+  const mat = (n) => new THREE.MeshStandardMaterial({ map: tex(n), alphaTest: .35, side: THREE.DoubleSide, roughness: .55, metalness: 0, transparent: false, emissive: 0x000000 });
+  const N = small ? 22 : 44;
   const kinds = {
     rose: new THREE.InstancedMesh(geo, mat('rose'), N),
     marigold: new THREE.InstancedMesh(geo, mat('marigold'), N),
@@ -53,7 +56,7 @@ if (canvas && !reduce) {
   Object.values(kinds).forEach(m => { m.userData.cap = m.count; m.count = 0; m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; scene.add(m); });
 
   // sparks
-  const S = small ? 110 : 220;
+  const S = small ? 70 : 150;
   const sg = new THREE.BufferGeometry();
   const spos = new Float32Array(S * 3), sph = new Float32Array(S), ssz = new Float32Array(S);
   for (let i = 0; i < S; i++) { spos.set([(Math.random() - .5) * 16, (Math.random() - .5) * 11, -6 + Math.random() * 10], i * 3); sph[i] = Math.random() * 6.28; ssz[i] = .5 + Math.random(); }
@@ -81,7 +84,7 @@ if (canvas && !reduce) {
     o.vel = new THREE.Vector3(.15 + Math.random() * .25, -(.35 + Math.random() * .5), 0);
     o.rot = new THREE.Euler(Math.random() * 6, Math.random() * 6, Math.random() * 6);
     o.spin = new THREE.Vector3((Math.random() - .5) * 1.6, (Math.random() - .5) * 1.6, (Math.random() - .5) * 1.2);
-    o.scale = (o.kind === 'jasmine' ? .26 : o.kind === 'marigold' ? .2 : .3) * (0.8 + Math.random() * .5) * sc;
+    o.scale = (o.kind === 'jasmine' ? .34 : o.kind === 'marigold' ? .32 : .36) * (0.75 + Math.random() * .55) * sc;
     o.ph = Math.random() * 6.28;
     const pal = o.kind === 'rose' ? theme.rose : o.kind === 'marigold' ? theme.marigold : ['#FBF6EC', '#F4EEE6'];
     o.col = new THREE.Color(pal[(Math.random() * pal.length) | 0]);
@@ -99,7 +102,8 @@ if (canvas && !reduce) {
   const dummy = new THREE.Object3D(), tmpC = new THREE.Color();
   const clock = new THREE.Clock();
   let running = true;
-  document.addEventListener('visibilitychange', () => { running = !document.hidden; if (running) { clock.getDelta(); loop(); } });
+  const resume = () => { const go = !document.hidden && !paused; if (go && !running) { running = true; clock.getDelta(); loop(); } else if (!go) running = false; };
+  document.addEventListener('visibilitychange', resume); wake = resume;
   function loop() {
     if (!running) return;
     const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
@@ -135,5 +139,6 @@ if (canvas && !reduce) {
 window.FX3D = {
   setTheme(name) { if (THEMES[name]) theme = THEMES[name]; },
   setLevel(v) { levelTarget = v; },
+  setPaused(v) { paused = !!v; if (canvas) canvas.style.opacity = v ? '0' : ''; if (wake) wake(); },
 };
 window.dispatchEvent(new Event('fx3d-ready'));

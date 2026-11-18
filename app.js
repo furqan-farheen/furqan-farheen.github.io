@@ -6,13 +6,17 @@
 (function () {
   'use strict';
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // motion toggle: starts paused for reduced-motion users; the choice is remembered on this device
+  let still = reduce;
+  try { const v = localStorage.getItem('ff-still'); if (v !== null) still = v === '1'; } catch (e) {}
+  document.documentElement.classList.toggle('still', still);
   const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
   gsap.registerPlugin(ScrollTrigger);
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const aspectKey = () => { const a = innerWidth / innerHeight; return a < 0.62 ? 'p' : a < 1.05 ? 't' : 'l'; };
   let KEY = aspectKey();
-  const A = (n) => `assets/r/${n}`;
+  const A = (n) => `assets/v3/${n}`;
   const SCENES = $$('canvas.paint').map(c => c.dataset.scene);
 
   /* ------------------------------------------------------------ preload */
@@ -20,7 +24,7 @@
   const load = (u) => cache[u] || (cache[u] = new Promise(res => { const im = new Image(); im.decoding = 'async';
     im.onload = () => { IM[u] = im; res(im); }; im.onerror = () => res(null); im.src = u; }));
   const setFor = (k) => SCENES.flatMap(s => [A(`${s}_${k}.jpg`), A(`${s}_mask_${k}.png`)]);
-  const urls = [...setFor(KEY), ...$$('img').map(i => i.getAttribute('src')).filter(Boolean)];
+  const urls = [...setFor(KEY), ...$$('img:not([data-scene])').map(i => i.getAttribute('src')).filter(Boolean)];
   const prog = { v: 0 }, cnt = $('#loader .count'), bar = $('#loader .rule b');
   let loaded = 0;
   const all = Promise.all(urls.map(u => load(u).then(() => { loaded++; gsap.to(prog, { v: loaded / urls.length, duration: .6, overwrite: true }); })))
@@ -42,15 +46,15 @@
     vec4 mk = texture2D(uMask, uv);
     vec2 q = vec2(fbm(uv*vec2(3.,1.6)+vec2(t*.035,0.)), fbm(uv*vec2(3.,1.6)+vec2(5.2,1.3)-vec2(t*.028,t*.01)));
     vec2 r = vec2(fbm(uv*4.+q*2.+vec2(t*.02)), fbm(uv*4.+q*2.+vec2(8.3,2.8)));
-    vec2 off = (r-.5)*.022*mk.r;
+    vec2 off = (r-.5)*.014*mk.r;
     off.x += sin(uv.y*240.-t*1.7+fbm(uv*18.)*7.)*.0022*mk.g;
     off.y += sin(uv.x*70.+t*1.1)*.0012*mk.g;
-    off += (vec2(fbm(uv*6.+t*.05), fbm(uv*6.-t*.045+3.))-.5)*.003;
-    off.y += (fbm(uv*vec2(2.,8.)+t*.2)-.5)*uVel*.012;
+    off += (vec2(fbm(uv*6.+t*.05), fbm(uv*6.-t*.045+3.))-.5)*.0008*(mk.r+mk.g);
+    off.y += (fbm(uv*vec2(2.,8.)+t*.2)-.5)*uVel*.004;
     for(int i=0;i<8;i++){ vec4 d = uDrop[i]; float age = t - d.z; if(age < 0. || age > 5.) continue;
       vec2 dv = (vUv - d.xy)*vec2(uCan,1.); float rr = length(dv);
       float w = sin(rr*48. - age*6.5)*exp(-rr*5.5)*exp(-age*1.1)*d.w;
-      off += dv/(rr+1e-4)*w*.0065*sc; }
+      off += dv/(rr+1e-4)*w*.0028*sc*(.35+.65*max(mk.r,mk.g)); }
     float rv = clamp(uReveal,0.,1.);
     float front = fbm(uv*3.5+vec2(0.,t*.15))*.55 + (1.-uv.y)*.25 + abs(uv.x-.5)*.2;
     float m = smoothstep(front-.02, front+.06, rv*1.25);
@@ -86,7 +90,9 @@
       gl.uniform1i(this.U.uTex, 0); gl.uniform1i(this.U.uMask, 1);
       this.tex = [gl.createTexture(), gl.createTexture()];
       this.resize(); addEventListener('resize', () => this.resize());
-      new IntersectionObserver(es => es.forEach(e => e.isIntersecting ? this.start() : this.stop()), { rootMargin: '100px' }).observe(canvas);
+      this.visible = false;
+      new IntersectionObserver(es => es.forEach(e => { this.visible = e.isIntersecting; e.isIntersecting ? this.start() : this.stop(); }), { rootMargin: '100px' }).observe(canvas);
+      document.addEventListener('visibilitychange', () => document.hidden ? this.stop() : this.visible && this.start());
     }
     setImages(img, mask) {
       if (!this.ok || !img) return; const gl = this.gl; this.img = img;
@@ -102,10 +108,11 @@
     now() { return (performance.now() - this.t0) / 1000; }
     drop(x, y, s = 1) { const i = (this.di++ % 8) * 4; this.drops.set([x, y, this.now(), s], i); }
     draw() { if (!this.ok || !this.img) return; const gl = this.gl, U = this.U;
-      gl.uniform1f(U.uTime, reduce ? 0 : this.now()); gl.uniform1f(U.uReveal, this.reveal); gl.uniform1f(U.uSheen, this.sheen);
+      if (!still) this.t = this.now(); gl.uniform1f(U.uTime, this.t || 0); gl.uniform1f(U.uReveal, this.reveal); gl.uniform1f(U.uSheen, this.sheen);
       gl.uniform1f(U.uVel, this.vel); gl.uniform3fv(U.uBase, this.base); gl.uniform4fv(U.uDrop, this.drops); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
-    start() { if (this.running || !this.ok) return; this.running = true; const loop = () => { if (!this.running) return; this.draw(); requestAnimationFrame(loop); };
-      reduce ? this.draw() : requestAnimationFrame(loop); }
+    start() { if (this.running || !this.ok) return; this.running = true;
+      const loop = () => { if (!this.running) return; this.draw(); if (still && !this.busy) { this.running = false; return; } requestAnimationFrame(loop); };
+      requestAnimationFrame(loop); }
     stop() { this.running = false; }
     // map image-space (fx, fy) to element-space fractions for the current cover crop
     map(fx, fy) { const r = this.c.getBoundingClientRect(); const ca = r.width / r.height, ia = this.img.width / this.img.height;
@@ -202,7 +209,7 @@
         wrap.appendChild(el); }); });
     const apply = async () => {
       await Promise.all(SCENES.map(async s => { const [im, mk] = await Promise.all([load(A(`${s}_${KEY}.jpg`)), load(A(`${s}_mask_${KEY}.png`))]);
-        if (LQ[s]) LQ[s].setImages(im, mk); const fb = $(`img.paint-fallback[data-scene="${s}"]`); if (fb) fb.src = A(`${s}_${KEY}.jpg`); }));
+        if (LQ[s]) LQ[s].setImages(im, mk); }));
       $$('#s-rsvp .strip img.sky').forEach(i => i.src = A(`strip_${KEY}.webp`)); placeGlows(); };
     await apply();
     buildArches(); buildFrame();
@@ -229,7 +236,7 @@
       $$('section .corner').forEach(el => { const sec = el.closest('section');
         gsap.fromTo(el, { y: 0 }, { y: () => (el.classList.contains('tl') || el.classList.contains('tr') ? -1 : 1) * innerHeight * .06, ease: 'none',
           scrollTrigger: { trigger: sec, start: 'top top', end: 'bottom top', scrub: true } }); });
-      if (fine) { const qs = $$('#s-invite .corner, #card').map(el => ({ el, k: el.id === 'card' ? -6 : 14 }));
+      if (fine && !still) { const qs = $$('#s-invite .corner, #card').map(el => ({ el, k: el.id === 'card' ? -6 : 14 }));
         addEventListener('pointermove', e => { const nx = e.clientX / innerWidth - .5, ny = e.clientY / innerHeight - .5;
           qs.forEach(({ el, k }) => gsap.to(el, { x: nx * k, y: ny * k, duration: 1.4, ease: 'power3.out', overwrite: 'auto' })); }); }
       $$('section.scene:not(#s-invite)').forEach(sec => gsap.fromTo($$('canvas.paint, img.paint-fallback', sec), { yPercent: -5 }, { yPercent: 5, ease: 'none',
@@ -240,7 +247,8 @@
     $$('main > section:not(#s-invite)').forEach(s => reveals(s));
     // paint floods in as each scene arrives; petals follow the chapter's theme
     $$('section.scene:not(#s-invite)').forEach(sec => { const c = $('canvas.paint', sec); const L = c && LQ[c.dataset.scene];
-      if (L && L.ok) ScrollTrigger.create({ trigger: sec, start: 'top 80%', once: true, onEnter: () => gsap.to(L, { reveal: 1, duration: reduce ? 0 : 3.2, ease: 'power1.inOut' }) }); });
+      if (L && L.ok) ScrollTrigger.create({ trigger: sec, start: 'top 80%', once: true, onEnter: () => { L.busy = true; L.start();
+        gsap.to(L, { reveal: 1, duration: still ? .01 : 3.2, ease: 'power1.inOut', onComplete: () => { L.busy = false; L.draw(); } }); } }); });
     $$('main > section[data-theme]').forEach(sec => ScrollTrigger.create({ trigger: sec, start: 'top 55%', end: 'bottom 55%',
       onToggle: st => { if (st.isActive) fx.theme(sec.dataset.theme); } }));
     ScrollTrigger.create({ trigger: '#s-rsvp .card', start: 'top 75%', once: true, onEnter: () => drawPaths($('#s-rsvp svg.frame'), 3.2) });
@@ -270,36 +278,59 @@
     if (snd) snd.addEventListener('click', () => (musicOn ? stopMusic() : startMusic()));
     document.addEventListener('visibilitychange', () => { if (!music) return; if (document.hidden) music.pause(); else if (musicOn) music.play().catch(() => {}); });
 
-    let opened = false;
+    // ------- opening: bow loosens, ribbon halves part, flap swings on its top hinge, invitation rises
+    let opened = false, playing = false;
+    const intro = $('#intro');
+    const tl = gsap.timeline({ paused: true, defaults: { ease: 'power3.inOut' } });
+    tl.to('#card .hint, #card .halo', { opacity: 0, duration: .4 })
+      .to('#card .bow', { scaleX: 1.05, scaleY: .96, duration: .35, ease: 'sine.inOut' }, 0)
+      .to('#card .bow', { y: '-2%', scale: .7, rotate: -10, opacity: 0, duration: 1.0, ease: 'power3.in' }, .3)
+      .to('#card .rib-l', { xPercent: -55, opacity: 0, duration: 1.3, ease: 'power3.in' }, .55)
+      .to('#card .rib-r', { xPercent: 55, opacity: 0, duration: 1.3, ease: 'power3.in' }, .55)
+      .to('#card .flap', { rotateX: 176, duration: 1.4, ease: 'power2.inOut' }, 1.3)
+      .to('#card .flap', { opacity: 0, duration: .45 }, 2.35)
+      .to('#card .txtgrp', { opacity: 0, y: -20, duration: .9 }, 1.8)
+      .to('#card .env-fl', { opacity: 0, scale: 1.08, duration: 1.2 }, 2.0)
+      .to(card, { yPercent: 70, rotate: 2, opacity: 0, duration: 1.6, ease: 'power3.in' }, 2.3)
+      .to('#intro .veil', { opacity: 0, duration: 1.2 }, 2.6)
+      .add(() => { if (G) { G.busy = true; G.start(); G.drop(.5, .5, 2.2); } }, 3.0)
+      .fromTo(G || {}, { reveal: 0 }, { reveal: 1, duration: 3.6, ease: 'power1.inOut', immediateRender: false, onComplete: () => { if (G) G.busy = false; } }, 3.0)
+      .fromTo('#s-invite .arch', { opacity: 0, clipPath: 'circle(0% at 50% 45%)' }, { opacity: 1, clipPath: 'circle(85% at 50% 45%)', duration: 2.6, ease: 'expo.inOut' }, 3.8)
+      .fromTo('#s-invite .corner', { opacity: 0, scale: .8 }, { opacity: 1, scale: 1, duration: 2.6, stagger: .12, ease: 'expo.out' }, 4.2)
+      .add(() => { heroTL.play(); fx.level(1); }, 4.6)
+      .add(() => { intro.style.display = 'none'; document.body.classList.remove('locked'); lenis.start(); ScrollTrigger.refresh(); playing = false; }, 5.2)
+      .fromTo('.cue', { opacity: 0 }, { opacity: 1, duration: 1.2 }, 7.2);
     const open = () => {
-      if (opened) return; opened = true;
+      if (opened || playing) return; opened = playing = true;
       startMusic();
       $$('#card .halo, #card .sway').forEach(el => el.style.animation = 'none');
       if (G) G.drop(.5, .38, 1.6);
-      const tl = gsap.timeline({ defaults: { ease: 'power3.inOut' } });
-      tl.to('#card .hint, #card .halo', { opacity: 0, duration: .4 })
-        .to('#card .bow', { scaleX: 1.06, scaleY: .96, duration: .35, ease: 'sine.inOut' }, 0)
-        .to('#card .bow', { y: '-3%', scale: .55, rotate: -14, opacity: 0, filter: 'blur(4px)', duration: 1.0, ease: 'power3.in' }, .3)
-        .to('#card .rib-l', { xPercent: -60, opacity: 0, duration: 1.3, ease: 'power3.in' }, .55)
-        .to('#card .rib-r', { xPercent: 60, opacity: 0, duration: 1.3, ease: 'power3.in' }, .55)
-        .to('#card .flap', { rotateX: 178, duration: 1.4, ease: 'power2.inOut' }, 1.3)
-        .to('#card .flap', { opacity: 0, duration: .4 }, 2.4)
-        .to('#card .txtgrp', { opacity: 0, y: -20, filter: 'blur(6px)', duration: .9 }, 1.8)
-        .to('#card .env-fl', { opacity: 0, scale: 1.12, duration: 1.2 }, 2.0)
-        .to(card, { yPercent: 75, rotate: 3, opacity: 0, duration: 1.6, ease: 'power3.in' }, 2.3)
-        .to('#intro .veil', { opacity: 0, duration: 1.2 }, 2.6)
-        .add(() => { if (G) { G.reveal = 0; G.drop(.5, .5, 2.2); } }, 3.0)
-        .to(G || {}, { reveal: 1, duration: reduce ? 0 : 3.6, ease: 'power1.inOut' }, 3.0)
-        .fromTo('#s-invite .arch', { opacity: 0, clipPath: 'circle(0% at 50% 45%)' }, { opacity: 1, clipPath: 'circle(85% at 50% 45%)', duration: 2.6, ease: 'expo.inOut' }, 3.8)
-        .fromTo('#s-invite .corner', { opacity: 0, scale: .8 }, { opacity: 1, scale: 1, duration: 2.6, stagger: .12, ease: 'expo.out' }, 4.2)
-        .add(() => { heroTL.play(); fx.level(1); }, 4.6)
-        .add(() => { $('#intro').remove(); document.body.classList.remove('locked'); lenis.start(); ScrollTrigger.refresh(); }, 5.2)
-        .to('.cue', { opacity: 1, duration: 1.2 }, 7.2);
-      if (reduce) tl.timeScale(5);
+      tl.timeScale(still ? 4 : 1).play(0);
+    };
+    const replay = () => {
+      if (playing) return;
+      lenis.stop(); lenis.scrollTo(0, { immediate: true, force: true }); window.scrollTo(0, 0);
+      tl.pause(0); opened = false; if (G) { G.reveal = 1; G.busy = false; G.draw(); }
+      $$('#card .halo, #card .sway').forEach(el => el.style.animation = '');
+      intro.style.display = ''; document.body.classList.add('locked');
+      gsap.fromTo(card, { opacity: 0, scale: .96 }, { opacity: 1, scale: 1, duration: 1.2, ease: 'expo.out' });
     };
     $('#card .tap').addEventListener('click', open);
-    $('#intro').addEventListener('click', e => { if (!e.target.closest('.tap')) open(); });
-    addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') open(); });
+    intro.addEventListener('click', e => { if (!e.target.closest('.tap')) open(); });
+    addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && intro.style.display !== 'none' && !e.target.closest('button, a')) { e.preventDefault(); open(); } });
+    $$('.replay').forEach(b => b.addEventListener('click', replay));
+
+    // ------- motion toggle (pauses paint, petals, sway and glows; remembered per device)
+    const mot = $('#motion');
+    const setStill = (v) => { still = v; document.documentElement.classList.toggle('still', v);
+      try { localStorage.setItem('ff-still', v ? '1' : '0'); } catch (e) {}
+      if (mot) { mot.setAttribute('aria-pressed', String(v)); mot.setAttribute('aria-label', v ? 'Play animation' : 'Pause animation'); }
+      if (window.FX3D) window.FX3D.setPaused(v);
+      Object.values(LQ).forEach(L => { if (L.ok && L.visible) { L.stop(); L.start(); } }); };
+    if (mot) { mot.classList.add('ready'); mot.addEventListener('click', () => setStill(!still)); }
+    const fxPause = () => window.FX3D && window.FX3D.setPaused(still);
+    window.FX3D ? fxPause() : addEventListener('fx3d-ready', fxPause, { once: true });
+    setStill(still);
     $('.cue').addEventListener('click', () => lenis.scrollTo($('#s-invite').nextElementSibling, { duration: 2 }));
   });
 })();
