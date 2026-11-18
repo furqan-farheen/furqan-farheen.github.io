@@ -466,3 +466,9 @@ html.still .glows .glow { animation: none !important; }
 /* paintings fade in over the static picture once their image has arrived */
 canvas.paint { opacity: 0; transition: opacity .6s ease; }
 html.lite .glows .glow { animation-duration: 6s !important; }
+
+/* script swashes (j, f, y tails; F, W, M entry strokes) reach well outside their letter boxes:
+   give every Armelie line invisible breathing room so no animation layer or clip can cut them */
+[data-r="write"], [data-r="write"] .line > span, #card .n, #card .a, .ev .evinv, #s-rsvp .rcn, #s-rsvp .sign, #s-rsvp .soft, #s-rsvp .rgt {
+  padding: .32em .5em .55em; margin: -.32em -.5em -.55em; }
+[data-r="write"] .line > span { will-change: auto; }

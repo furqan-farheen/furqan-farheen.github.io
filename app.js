@@ -15,6 +15,7 @@
   const MOBILE = !fine || Math.min(innerWidth, innerHeight) < 820;
   let lite = false;                       // switched on automatically if the device can't keep up
   gsap.registerPlugin(ScrollTrigger);
+  ScrollTrigger.config({ ignoreMobileResize: true });
   // every visit starts at the envelope (browsers otherwise restore the old scroll position behind it)
   try { history.scrollRestoration = 'manual'; } catch (e) {}
   scrollTo(0, 0);
@@ -29,7 +30,7 @@
   const cache = {}, IM = {};
   // images retry up to 3 times (slow or flaky mobile data), then resolve null so nothing ever hangs
   const fetchImg = (u, tries = 0) => new Promise(res => { const im = new Image(); im.decoding = 'async';
-    im.onload = () => res(im); im.onerror = () => tries < 3 ? setTimeout(() => fetchImg(u, tries + 1).then(res), 800 * 2 ** tries) : res(null);
+    im.onload = () => (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(() => res(im)); im.onerror = () => tries < 3 ? setTimeout(() => fetchImg(u, tries + 1).then(res), 800 * 2 ** tries) : res(null);
     im.src = tries ? `${u}${u.includes('?') ? '&' : '?'}r=${tries}` : u; });
   const load = (u) => cache[u] || (cache[u] = fetchImg(u).then(im => { if (im) IM[u] = im; return im; }));
   const sceneUrls = (s, k) => [A(`${s}_${k}.webp`), A(`${s}_mask_${k}.png`)];
@@ -112,7 +113,7 @@
       this.U = {}; ['uTex', 'uMask', 'uTime', 'uReveal', 'uSheen', 'uTexel', 'uBase', 'uVel', 'uImg', 'uCan', 'uDrop', 'uL'].forEach(k => this.U[k] = gl.getUniformLocation(pr, k));
       gl.uniform1i(this.U.uTex, 0); gl.uniform1i(this.U.uMask, 1);
       this.tex = [gl.createTexture(), gl.createTexture()];
-      this.resize(); addEventListener('resize', () => this.resize());
+      this.resize(); let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => this.resize(), 120); });
       this.visible = false;
       new IntersectionObserver(es => es.forEach(e => { this.visible = e.isIntersecting; e.isIntersecting ? this.start() : this.stop(); }), { rootMargin: '100px' }).observe(canvas);
       document.addEventListener('visibilitychange', () => document.hidden ? this.stop() : this.visible && this.start());
@@ -125,9 +126,11 @@
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); });
       gl.uniform2f(this.U.uTexel, 1.4 / img.width, 1.4 / img.height); gl.uniform1f(this.U.uImg, img.width / img.height); this.draw();
     }
-    resize() { const d = Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 2); const r = this.c.getBoundingClientRect();
-      this.c.width = Math.max(2, Math.round(r.width * d)); this.c.height = Math.max(2, Math.round(r.height * d));
-      if (this.gl) { this.gl.viewport(0, 0, this.c.width, this.c.height); this.gl.uniform1f(this.U.uCan, r.width / Math.max(1, r.height)); } this.draw(); }
+    resize() { const d = Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 2); const cw = this.c.clientWidth, ch = this.c.clientHeight;
+      const W = Math.max(2, Math.round(cw * d)), H = Math.max(2, Math.round(ch * d));
+      if (W === this.c.width && H === this.c.height) return;
+      this.c.width = W; this.c.height = H;
+      if (this.gl) { this.gl.viewport(0, 0, W, H); this.gl.uniform1f(this.U.uCan, cw / Math.max(1, ch)); } this.draw(); }
     now() { return (performance.now() - this.t0) / 1000; }
     setLights(arr) { this.lights.fill(0); (arr || []).slice(0, 16).forEach(([x, y], i) => this.lights.set([x, y, y < .3 ? 1 : 2, i * 1.71], i * 4)); this.draw(); }
     drop(x, y, s = 1) { const i = (this.di++ % 8) * 4; this.drops.set([x, y, this.now(), s], i); }
@@ -191,7 +194,9 @@
   const makeCloth = (im) => { if (!im.naturalWidth) { im.addEventListener('load', () => clothVis.get(im) && makeCloth(im), { once: true }); return; }
     if (still || reduce || lite || clothFor.get(im)) return; const c = new Cloth(im); if (c.ok) { clothFor.set(im, c); c.start(); } };
   const dropCloth = (im) => { const c = clothFor.get(im); if (c) { c.destroy(); clothFor.delete(im); } };
-  const clothIO = new IntersectionObserver(es => es.forEach(e => { clothVis.set(e.target, e.isIntersecting); e.isIntersecting ? makeCloth(e.target) : dropCloth(e.target); }), { rootMargin: '120px' });
+  const clothNear = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { clothVis.set(e.target, true); makeCloth(e.target); } }), { rootMargin: '100% 0px' });
+  const clothFar = new IntersectionObserver(es => es.forEach(e => { if (!e.isIntersecting) { clothVis.set(e.target, false); dropCloth(e.target); } }), { rootMargin: '220% 0px' });
+  const clothIO = { observe: (im) => { clothNear.observe(im); clothFar.observe(im); } };
 
   /* --------------------------------------------------------- geometry */
   function cuspedArch(cx, base, w, h, springFrac = .7, cusps = 9, depth = .028, n = 260) {
@@ -314,7 +319,8 @@
     await ensure('garden');
     $$('img.couple').forEach(im => clothIO.observe(im));
     buildArches(); buildFrame();
-    let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { buildArches(); buildFrame(); const k = aspectKey();
+    let rT, lastW = innerWidth; addEventListener('resize', () => { if (MOBILE && innerWidth === lastW) return; lastW = innerWidth;
+      clearTimeout(rT); rT = setTimeout(() => { buildArches(); buildFrame(); const k = aspectKey();
       if (k !== KEY) { KEY = k; apply(); if (strip.getAttribute('src')) strip.src = A(`strip_${KEY}.webp`); } else placeGlows(); ScrollTrigger.refresh(); }, 160); });
 
     // pointer ripples on whichever painting is under the finger
@@ -404,10 +410,10 @@
       .fromTo('#s-invite .arch', { opacity: 0, clipPath: 'circle(0% at 50% 45%)' }, { opacity: 1, clipPath: 'circle(85% at 50% 45%)', duration: 2.6, ease: 'expo.inOut' }, 3.8)
       .fromTo('#s-invite .corner', { opacity: 0, scale: .8 }, { opacity: 1, scale: 1, duration: 2.6, stagger: .12, ease: 'expo.out' }, 4.2)
       .add(() => { heroTL.play(); fx.level(1); }, 4.6)
-      .add(() => { intro.style.display = 'none'; document.body.classList.remove('locked'); lenis.start(); ScrollTrigger.refresh(); playing = false; }, 5.2)
+      .add(() => { intro.style.display = 'none'; document.body.classList.remove('locked'); lenis.start(); ScrollTrigger.refresh(); playing = false; setTimeout(loadFX, 600); }, 5.2)
       .fromTo('.cue', { opacity: 0 }, { opacity: 1, duration: 1.2 }, 7.2);
     const open = () => {
-      if (opened || playing) return; opened = playing = true; openedOnce = true; loadFX();
+      if (opened || playing) return; opened = playing = true; openedOnce = true; if (!MOBILE) loadFX();
       startMusic();
       $$('#card .halo, #card .sway').forEach(el => el.style.animation = 'none');
       if (G) G.drop(.5, .38, 1.6);
