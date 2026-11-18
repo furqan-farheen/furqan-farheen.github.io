@@ -260,9 +260,20 @@
     const fxInit = () => { fx.theme('garden'); fx.level(.25); };
     window.FX3D ? fxInit() : addEventListener('fx3d-ready', fxInit, { once: true });
 
+    // ------- music: original Raag Yaman piece; starts on the envelope tap (a user gesture, so phones allow it)
+    const music = $('#music'), snd = $('#sound');
+    let musicOn = false;
+    const fadeTo = (v, d = 2.5) => gsap.to(music, { volume: v, duration: d, ease: 'sine.inOut', overwrite: true });
+    const startMusic = () => { if (!music) return; music.volume = 0; const p = music.play(); if (p && p.catch) p.catch(() => {});
+      musicOn = true; snd.className = 'on'; fadeTo(.55, 3); };
+    const stopMusic = () => { musicOn = false; snd.className = 'off'; gsap.to(music, { volume: 0, duration: .8, onComplete: () => music.pause() }); };
+    if (snd) snd.addEventListener('click', () => (musicOn ? stopMusic() : startMusic()));
+    document.addEventListener('visibilitychange', () => { if (!music) return; if (document.hidden) music.pause(); else if (musicOn) music.play().catch(() => {}); });
+
     let opened = false;
     const open = () => {
       if (opened) return; opened = true;
+      startMusic();
       $$('#card .halo, #card .sway').forEach(el => el.style.animation = 'none');
       if (G) G.drop(.5, .38, 1.6);
       const tl = gsap.timeline({ defaults: { ease: 'power3.inOut' } });
