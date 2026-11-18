@@ -17,7 +17,7 @@ const THEMES = {
   night: { mix: { rose: .6, jasmine: .4, marigold: 0 }, rose: ['#D9A7A0', '#C98F87'], marigold: ['#E9962E'], spark: '#FFD58A', sparks: 1.3, petals: .35 },
 };
 
-let theme = THEMES.garden, level = 0, levelTarget = 0, paused = false, wake = null;
+let theme = THEMES.garden, level = 0, levelTarget = 0, paused = false, wake = null, gust = null;
 
 let renderer = null;
 try { if (canvas && !reduce) renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !small, powerPreference: 'high-performance' }); }
@@ -90,6 +90,14 @@ if (renderer) {
     o.col = new THREE.Color(pal[(Math.random() * pal.length) | 0]);
     return o;
   };
+  // a sweep of petals in the new chapter's colours, carried across the screen on a breeze
+  let burstUntil = -1;
+  gust = () => {
+    const now = clock.elapsedTime; if (now < burstUntil - 2) return; burstUntil = now + 4.5;
+    parts.forEach((o, i) => { if (i % 3 === 2) return; spawn(o, false);
+      o.pos.set(-view.w * (.7 + Math.random() * .6), (Math.random() - .35) * view.h * .9, -3.5 + Math.random() * 5);
+      o.vel.set(3.2 + Math.random() * 2.6, -.15 - Math.random() * .45, 0); o.burst = true; });
+  };
   const TOTAL = Math.round(N * 1.25);
   for (let i = 0; i < TOTAL; i++) parts.push(spawn({}, false));
 
@@ -108,18 +116,19 @@ if (renderer) {
     if (!running) return;
     const dt = Math.min(clock.getDelta(), .05), t = clock.elapsedTime;
     level += (levelTarget - level) * Math.min(1, dt * 1.2);
-    const gust = .5 + .5 * Math.sin(t * .21) * Math.sin(t * .13 + 1.7);
+    const wind = .5 + .5 * Math.sin(t * .21) * Math.sin(t * .13 + 1.7);
     mWorld.set(mouse.x * view.w / 2, mouse.y * view.h / 2, 0);
     const counts = { rose: 0, marigold: 0, jasmine: 0 };
-    const active = Math.round(parts.length * Math.min(1, level * theme.petals));
+    const active = t < burstUntil ? parts.length : Math.round(parts.length * Math.min(1, level * theme.petals));
     for (let i = 0; i < parts.length; i++) {
       const o = parts[i];
       if (i >= active) { if (o.pos.y > -view.h) o.pos.y -= dt * 2; continue; }
-      o.pos.x += (o.vel.x * (1 + gust * 1.8) + Math.sin(t * .7 + o.ph) * .25) * dt;
+      if (o.burst) { o.vel.x += ((.15 + (o.ph % 1) * .25) - o.vel.x) * Math.min(1, dt * .45); if (o.vel.x < .5) o.burst = false; }
+      o.pos.x += (o.vel.x * (1 + wind * 1.8) + Math.sin(t * .7 + o.ph) * .25) * dt;
       o.pos.y += (o.vel.y + Math.cos(t * .9 + o.ph) * .12) * dt;
       const dx = o.pos.x - mWorld.x, dy = o.pos.y - mWorld.y, d2 = dx * dx + dy * dy;
       if (o.pos.z > -2 && d2 < 2.2) { const f = (2.2 - d2) * .9 * dt; o.pos.x += dx * f; o.pos.y += dy * f; o.rot.z += f * 3; }
-      o.rot.x += o.spin.x * dt; o.rot.y += o.spin.y * dt * (1 + gust); o.rot.z += o.spin.z * dt;
+      o.rot.x += o.spin.x * dt; o.rot.y += o.spin.y * dt * (1 + wind + (o.burst ? 2 : 0)); o.rot.z += o.spin.z * dt;
       if (o.pos.y < -view.h * .65 - 1 || o.pos.x > view.w * .8 + 2) spawn(o, true);
       const m = kinds[o.kind]; const idx = counts[o.kind]++;
       if (idx >= m.userData.cap) continue;
@@ -139,6 +148,7 @@ if (renderer) {
 window.FX3D = {
   setTheme(name) { if (THEMES[name]) theme = THEMES[name]; },
   setLevel(v) { levelTarget = v; },
+  burst() { if (gust && !paused) gust(); },
   setPaused(v) { paused = !!v; if (canvas) canvas.style.opacity = v ? '0' : ''; if (wake) wake(); },
 };
 window.dispatchEvent(new Event('fx3d-ready'));

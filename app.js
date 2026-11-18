@@ -37,6 +37,7 @@
   const FS = `precision highp float;
   varying vec2 vUv; uniform sampler2D uTex, uMask; uniform float uTime, uReveal, uSheen, uVel, uImg, uCan; uniform vec2 uTexel; uniform vec3 uBase;
   uniform vec4 uDrop[8];
+  uniform vec4 uL[16];   // lights: x, y, kind (1 hanging lamp, 2 flame), phase
   float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
   float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
   float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<5;i++){ v+=a*n(p); p=p*2.03+vec2(1.7,9.2); a*=.5; } return v; }
@@ -55,6 +56,13 @@
       vec2 dv = (vUv - d.xy)*vec2(uCan,1.); float rr = length(dv);
       float w = sin(rr*48. - age*6.5)*exp(-rr*5.5)*exp(-age*1.1)*d.w;
       off += dv/(rr+1e-4)*w*.0028*sc*(.35+.65*max(mk.r,mk.g)); }
+    for(int i=0;i<16;i++){ vec4 L = uL[i]; if(L.z < .5 || L.z > 1.5) continue;     // hanging lamps swing on their chains
+      vec2 piv = vec2(L.x, L.y - .06); vec2 asp = vec2(uImg, 1.);
+      vec2 d = (uv - piv)*asp; float dl = length((uv - L.xy)*asp);
+      float wgt = (1. - smoothstep(.028, .07, dl)) * smoothstep(-.02, .02, d.y);
+      float a = sin(t*1.2 + L.w)*.09*wgt;
+      vec2 rd = vec2(d.x*cos(a) - d.y*sin(a), d.x*sin(a) + d.y*cos(a));
+      off += (rd - d)/asp; }
     float rv = clamp(uReveal,0.,1.);
     float front = fbm(uv*3.5+vec2(0.,t*.15))*.55 + (1.-uv.y)*.25 + abs(uv.x-.5)*.2;
     float m = smoothstep(front-.02, front+.06, rv*1.25);
@@ -67,6 +75,10 @@
     vec3 L = normalize(vec3(cos(t*.23)*.7, sin(t*.19)*.5-.35, .75));
     float sp = pow(max(dot(reflect(-L,N), vec3(0.,0.,1.)),0.), 28.);
     c += sp*uSheen*(.6+.4*mk.r+.6*mk.g);
+    for(int i=0;i<16;i++){ vec4 L = uL[i]; if(L.z < 1.5) continue;                     // diyas & candles flicker
+      float dd = length((uv - L.xy)*vec2(uImg, 1.));
+      float f = .5 + .5*sin(t*8.3 + L.w)*sin(t*5.1 + L.w*2.7) + .25*sin(t*17. + L.w*3.1);
+      c += vec3(1., .74, .38)*exp(-dd*dd/.00022)*.2*f; }
     float edge = smoothstep(front-.02, front+.02, rv*1.25) - smoothstep(front+.02, front+.08, rv*1.25);
     c = mix(uBase, c, m) - edge*.06;
     gl_FragColor = vec4(c, 1.);
@@ -75,7 +87,7 @@
   class Liquid {
     constructor(canvas, opts) {
       this.c = canvas; Object.assign(this, { reveal: 1, base: [0.973, 0.953, 0.914], sheen: .1, vel: 0 }, opts);
-      this.drops = new Float32Array(32); this.di = 0; this.t0 = performance.now(); this.running = false;
+      this.drops = new Float32Array(32); this.lights = new Float32Array(64); this.di = 0; this.t0 = performance.now(); this.running = false;
       const gl = canvas.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'high-performance' });
       if (!gl) { this.ok = false; return; }
       this.ok = true; this.gl = gl;
@@ -86,7 +98,7 @@
       const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
       const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-      this.U = {}; ['uTex', 'uMask', 'uTime', 'uReveal', 'uSheen', 'uTexel', 'uBase', 'uVel', 'uImg', 'uCan', 'uDrop'].forEach(k => this.U[k] = gl.getUniformLocation(pr, k));
+      this.U = {}; ['uTex', 'uMask', 'uTime', 'uReveal', 'uSheen', 'uTexel', 'uBase', 'uVel', 'uImg', 'uCan', 'uDrop', 'uL'].forEach(k => this.U[k] = gl.getUniformLocation(pr, k));
       gl.uniform1i(this.U.uTex, 0); gl.uniform1i(this.U.uMask, 1);
       this.tex = [gl.createTexture(), gl.createTexture()];
       this.resize(); addEventListener('resize', () => this.resize());
@@ -106,10 +118,11 @@
       this.c.width = Math.max(2, Math.round(r.width * d)); this.c.height = Math.max(2, Math.round(r.height * d));
       if (this.gl) { this.gl.viewport(0, 0, this.c.width, this.c.height); this.gl.uniform1f(this.U.uCan, r.width / Math.max(1, r.height)); } this.draw(); }
     now() { return (performance.now() - this.t0) / 1000; }
+    setLights(arr) { this.lights.fill(0); (arr || []).slice(0, 16).forEach(([x, y], i) => this.lights.set([x, y, y < .3 ? 1 : 2, i * 1.71], i * 4)); this.draw(); }
     drop(x, y, s = 1) { const i = (this.di++ % 8) * 4; this.drops.set([x, y, this.now(), s], i); }
     draw() { if (!this.ok || !this.img) return; const gl = this.gl, U = this.U;
       if (!still) this.t = this.now(); gl.uniform1f(U.uTime, this.t || 0); gl.uniform1f(U.uReveal, this.reveal); gl.uniform1f(U.uSheen, this.sheen);
-      gl.uniform1f(U.uVel, this.vel); gl.uniform3fv(U.uBase, this.base); gl.uniform4fv(U.uDrop, this.drops); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+      gl.uniform1f(U.uVel, this.vel); gl.uniform3fv(U.uBase, this.base); gl.uniform4fv(U.uDrop, this.drops); gl.uniform4fv(U.uL, this.lights); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
     start() { if (this.running || !this.ok) return; this.running = true;
       const loop = () => { if (!this.running) return; this.draw(); if (still && !this.busy) { this.running = false; return; } requestAnimationFrame(loop); };
       requestAnimationFrame(loop); }
@@ -119,6 +132,45 @@
       const sc = ca > ia ? [1, ia / ca] : [ca / ia, 1]; return [(fx - .5) / sc[0] + .5, (fy - .5) / sc[1] + .5]; }
   }
 
+
+
+  /* --------------------------------------------------------- dupatta breeze */
+  const CFS = `precision mediump float; varying vec2 vUv; uniform sampler2D uT; uniform float uTime;
+  void main(){ vec2 uv = vUv;
+    float m = smoothstep(.6, .84, uv.x) * smoothstep(.13, .42, uv.y) * (1. - smoothstep(.8, .96, uv.y));
+    float w = sin(uv.y*7. - uTime*1.5)*.6 + sin(uv.y*13. - uTime*2.2 + 1.3)*.4;
+    uv.x += w*.016*m*clamp((uv.x - .55)*3., 0., 1.);
+    uv.y += sin(uTime*1.1 + uv.x*5.)*.003*m;
+    gl_FragColor = texture2D(uT, uv); }`;
+  const cloths = new Set();
+  class Cloth {
+    constructor(img) {
+      const c = document.createElement('canvas'); c.className = img.className + ' cloth'; c.setAttribute('aria-hidden', 'true');
+      const gl = c.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+      if (!gl) return;
+      this.img = img; this.c = c; this.gl = gl; this.t0 = performance.now(); this.running = false; this.visible = false;
+      const sh = (ty, src) => { const s = gl.createShader(ty); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, CFS));
+      gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return; gl.useProgram(pr);
+      const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      this.uT = gl.getUniformLocation(pr, 'uTime');
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      [gl.TEXTURE_MIN_FILTER, gl.TEXTURE_MAG_FILTER].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.LINEAR));
+      [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T].forEach(k => gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE));
+      img.after(c); img.style.visibility = 'hidden'; this.ok = true; cloths.add(this);
+      this.resize(); addEventListener('resize', () => this.resize());
+      new IntersectionObserver(es => es.forEach(e => { this.visible = e.isIntersecting; e.isIntersecting && !still ? this.start() : this.stop(); })).observe(c);
+      document.addEventListener('visibilitychange', () => document.hidden ? this.stop() : this.visible && !still && this.start());
+    }
+    resize() { const d = Math.min(devicePixelRatio || 1, 2), w = this.img.clientWidth, h = this.img.clientHeight; if (!w) return;
+      this.c.width = Math.round(w * d); this.c.height = Math.round(h * d); this.gl.viewport(0, 0, this.c.width, this.c.height); this.draw(); }
+    draw() { const gl = this.gl; gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.uniform1f(this.uT, (performance.now() - this.t0) / 1000); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+    start() { if (this.running) return; this.running = true; const loop = () => { if (!this.running) return; this.draw(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+    stop() { this.running = false; }
+  }
 
   /* --------------------------------------------------------- geometry */
   function cuspedArch(cx, base, w, h, springFrac = .7, cusps = 9, depth = .028, n = 260) {
@@ -142,7 +194,17 @@
       const outer = cuspedArch(w / 2, h, w, h, sf, 9, .028);
       const inner = cuspedArch(w / 2, h - w * .03, w * .92, h - w * .07, sfi, 9, .028);
       $$('.a-fill, .a-lip, .a-clip', svg).forEach(p => p.setAttribute('d', pathD(outer, true)));
-      const g = $('.a-gold', svg); g.setAttribute('d', pathD(inner.slice(1, -1), false)); g.setAttribute('stroke-width', Math.max(.8, w * .0035)); });
+      const g = $('.a-gold', svg); g.setAttribute('d', pathD(inner.slice(1, -1), false)); g.setAttribute('stroke-width', Math.max(.8, w * .0035));
+      const sh = $('.a-shine', svg); if (sh) { sh.setAttribute('d', g.getAttribute('d')); sh.setAttribute('stroke-width', Math.max(1.4, w * .0065)); glint(sh); } });
+  }
+  // a short bright dash that runs along a gold line, like light catching gold leaf
+  const glints = new Set();
+  function glint(path, dur = 7) {
+    if (path._gl) { path._gl.kill(); glints.delete(path._gl); }
+    const L = path.getTotalLength(), seg = Math.min(140, L * .12);
+    path.setAttribute('stroke-dasharray', `${seg} ${L + seg}`);
+    path._gl = gsap.fromTo(path, { strokeDashoffset: seg }, { strokeDashoffset: -L, duration: dur, ease: 'sine.inOut', repeat: -1, repeatDelay: 2.5, delay: Math.random() * 3, paused: still });
+    glints.add(path._gl);
   }
   function buildFrame() {
     const card = $('#s-rsvp .card'), svg = $('#s-rsvp svg.frame'); const w = card.clientWidth, h = card.clientHeight;
@@ -161,7 +223,8 @@
     const L = Math.min(110, w * .2);
     html += vine(0, h, -Math.PI / 2 + .25, L, -1) + vine(0, h, 0, L * .9, 1) + vine(w, h, -Math.PI / 2 - .25, L, 1) + vine(w, h, Math.PI, L * .9, -1);
     html += `<path class="leaf" d="M${w / 2} ${-24} L${w / 2 + 6} ${-9} L${w / 2} ${-1} L${w / 2 - 6} ${-9}Z"/>`;
-    svg.innerHTML = html;
+    svg.innerHTML = html + `<path class="shine" d="${pathD(arch(0))}" stroke-width="${sw * 2.4}"/>`;
+    glint($('.shine', svg), 9);
   }
   /* ---------------------------------------------------------- text fx */
   function splitChars(el) { const s = el.textContent; el.textContent = ''; el.setAttribute('aria-label', s);
@@ -191,7 +254,8 @@
   }
 
   /* -------------------------------------------------------------- main */
-  const fx = { theme: (n) => window.FX3D && window.FX3D.setTheme(n), level: (v) => window.FX3D && window.FX3D.setLevel(v) };
+  const fx = { theme: (n) => window.FX3D && window.FX3D.setTheme(n), level: (v) => window.FX3D && window.FX3D.setLevel(v),
+    burst: () => window.FX3D && window.FX3D.burst && window.FX3D.burst() };
   const OPTS = { garden: { reveal: 1, sheen: .1 }, night: { reveal: 0, sheen: .16, base: [0.043, 0.141, 0.122] },
     mehndi: { reveal: 0, sheen: .14, base: [0.23, 0.11, 0.2] }, barat: { reveal: 0, sheen: .1, base: [0.97, 0.95, 0.91] },
     walima: { reveal: 0, sheen: .16, base: [0.92, 0.86, 0.77] } };
@@ -205,9 +269,9 @@
     $$('canvas.paint').forEach(c => { const L = new Liquid(c, { ...(OPTS[c.dataset.scene] || {}) }); if (!L.ok) c.remove(); LQ[c.dataset.scene] = L; });
     const G = LQ.garden;
     const placeGlows = () => $$('.glows').forEach(wrap => { const s = wrap.dataset.scene, L = LQ[s]; wrap.innerHTML = '';
-      if (!L || !L.img) return;
+      if (!L || !L.img) return; L.setLights(window.LIGHTS[`${s}_${KEY}`]);
       (window.LIGHTS[`${s}_${KEY}`] || []).forEach(([fx_, fy, w], i) => { const [x, y] = L.map(fx_, fy); if (x < -.05 || x > 1.05 || y < -.05 || y > 1.05) return;
-        const el = document.createElement('i'); el.className = 'glow'; const sz = (w >= 1 ? 15 : w >= .6 ? 9 : 6) * (0.6 + .4 * Math.min(1, w));
+        const el = document.createElement('i'); el.className = 'glow ' + (fy < .3 ? 'hang' : 'flame'); const sz = (w >= 1 ? 15 : w >= .6 ? 9 : 6) * (0.6 + .4 * Math.min(1, w));
         Object.assign(el.style, { left: x * 100 + '%', top: y * 100 + '%', width: sz + 'vmin', height: sz + 'vmin', animationDuration: (2.2 + (i * .37) % 1.8) + 's', animationDelay: -((i * .61) % 2) + 's' });
         wrap.appendChild(el); }); });
     const apply = async () => {
@@ -215,6 +279,7 @@
         if (LQ[s]) LQ[s].setImages(im, mk); }));
       $$('#s-rsvp .strip img.sky').forEach(i => i.src = A(`strip_${KEY}.webp`)); placeGlows(); };
     await apply();
+    if (!reduce) $$('img.couple').forEach(im => (im.complete ? Promise.resolve() : im.decode().catch(() => {})).then(() => new Cloth(im)));
     buildArches(); buildFrame();
     let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { buildArches(); buildFrame(); const k = aspectKey();
       if (k !== KEY) { KEY = k; apply(); } else placeGlows(); ScrollTrigger.refresh(); }, 160); });
@@ -253,7 +318,7 @@
       if (L && L.ok) ScrollTrigger.create({ trigger: sec, start: 'top 80%', once: true, onEnter: () => { L.busy = true; L.start();
         gsap.to(L, { reveal: 1, duration: still ? .01 : 3.2, ease: 'power1.inOut', onComplete: () => { L.busy = false; L.draw(); } }); } }); });
     $$('main > section[data-theme]').forEach(sec => ScrollTrigger.create({ trigger: sec, start: 'top 55%', end: 'bottom 55%',
-      onToggle: st => { if (st.isActive) fx.theme(sec.dataset.theme); } }));
+      onToggle: st => { if (st.isActive) { fx.theme(sec.dataset.theme); if (sec.classList.contains('ev') && !still) fx.burst(); } } }));
     ScrollTrigger.create({ trigger: '#s-rsvp .card', start: 'top 75%', once: true, onEnter: () => drawPaths($('#s-rsvp svg.frame'), 3.2) });
 
     gsap.set(['#s-invite .arch', '#s-invite .corner'], { opacity: 0 });
@@ -330,6 +395,7 @@
       try { localStorage.setItem('ff-still', v ? '1' : '0'); } catch (e) {}
       if (mot) { mot.setAttribute('aria-pressed', String(v)); mot.setAttribute('aria-label', v ? 'Play animation' : 'Pause animation'); }
       if (window.FX3D) window.FX3D.setPaused(v);
+      glints.forEach(t => v ? t.pause() : t.play()); cloths.forEach(c => v ? c.stop() : c.visible && c.start());
       Object.values(LQ).forEach(L => { if (L.ok && L.visible) { L.stop(); L.start(); } }); };
     if (mot) { mot.classList.add('ready'); mot.addEventListener('click', () => setStill(!still)); }
     const fxPause = () => window.FX3D && window.FX3D.setPaused(still);

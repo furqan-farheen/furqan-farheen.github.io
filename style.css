@@ -440,3 +440,25 @@ section.ev .arch .content { padding-top: 36%; }
 #s-invite .arch .amp { margin: 5cqw 0 2cqw; font-size: 11cqw; }
 #s-invite .arch .inv { margin-top: 3.5cqw; }
 #s-rsvp .lead { font-size: 1.65em; }
+
+/* ------------------------------------------- v5: gold-leaf shimmer, lamp sway, flame flicker */
+.arch svg.paper .a-shine, #s-rsvp svg.frame .shine { fill: none; stroke: rgba(255, 246, 216, .95); stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(255, 226, 160, .9)); mix-blend-mode: screen; }
+.callig, #card .a, .arch .amp, .ev .evcouple i, #s-rsvp .sign i {
+  background-image: linear-gradient(105deg, transparent 42%, rgba(255, 251, 232, .95) 50%, transparent 58%),
+                    linear-gradient(180deg, #D9BF8A 0%, #B08D4E 48%, #7E5F2B 100%);
+  background-size: 300% 100%, 100% 100%; background-repeat: no-repeat; background-position: 150% 0, 0 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent; animation: foil 7s ease-in-out infinite; }
+#s-rsvp .sign i { background-image: linear-gradient(105deg, transparent 42%, rgba(255, 251, 232, .95) 50%, transparent 58%),
+                    linear-gradient(180deg, #E9D3A1 0%, #C4A46B 55%, #9C7A3E 100%); }
+.ev .evcouple i { padding: 0 .1em; }
+@keyframes foil { 0%, 40% { background-position: 150% 0, 0 0; } 100% { background-position: -50% 0, 0 0; } }
+.glows .glow.hang { transform-origin: 50% -140%; animation: flicker 3s ease-in-out infinite alternate, lamp 5.2s ease-in-out infinite; }
+.glows .glow.flame { animation: flame 1.3s ease-in-out infinite alternate; }
+@keyframes lamp { 0%, 100% { rotate: -2.6deg; } 50% { rotate: 2.6deg; } }
+@keyframes flame { 0% { opacity: .55; scale: .9; } 30% { opacity: 1; scale: 1.06; } 55% { opacity: .7; scale: .95; } 80% { opacity: .95; scale: 1.03; } 100% { opacity: .62; scale: .92; } }
+canvas.couple.cloth { pointer-events: none; }
+html.still .callig, html.still #card .a, html.still .arch .amp, html.still .ev .evcouple i, html.still #s-rsvp .sign i,
+html.still .glows .glow { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { .callig, #card .a, .arch .amp, .ev .evcouple i, #s-rsvp .sign i { animation: none; } }
+#s-night .msg { bottom: calc(14svh + env(safe-area-inset-bottom)); padding: 0 64px; }
