@@ -462,3 +462,7 @@ html.still .callig, html.still #card .a, html.still .arch .amp, html.still .ev .
 html.still .glows .glow { animation: none !important; }
 @media (prefers-reduced-motion: reduce) { .callig, #card .a, .arch .amp, .ev .evcouple i, #s-rsvp .sign i { animation: none; } }
 #s-night .msg { bottom: calc(14svh + env(safe-area-inset-bottom)); padding: 0 64px; }
+
+/* paintings fade in over the static picture once their image has arrived */
+canvas.paint { opacity: 0; transition: opacity .6s ease; }
+html.lite .glows .glow { animation-duration: 6s !important; }

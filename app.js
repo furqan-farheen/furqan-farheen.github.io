@@ -11,7 +11,13 @@
   try { const v = localStorage.getItem('ff-still'); if (v !== null) still = v === '1'; } catch (e) {}
   document.documentElement.classList.toggle('still', still);
   const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  // phones & tablets get a lighter renderer (fewer pixels, cheaper paint shader, 30 fps effects)
+  const MOBILE = !fine || Math.min(innerWidth, innerHeight) < 820;
+  let lite = false;                       // switched on automatically if the device can't keep up
   gsap.registerPlugin(ScrollTrigger);
+  // every visit starts at the envelope (browsers otherwise restore the old scroll position behind it)
+  try { history.scrollRestoration = 'manual'; } catch (e) {}
+  scrollTo(0, 0);
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
   const aspectKey = () => { const a = innerWidth / innerHeight; return a < 0.62 ? 'p' : a < 1.05 ? 't' : 'l'; };
@@ -21,10 +27,14 @@
 
   /* ------------------------------------------------------------ preload */
   const cache = {}, IM = {};
-  const load = (u) => cache[u] || (cache[u] = new Promise(res => { const im = new Image(); im.decoding = 'async';
-    im.onload = () => { IM[u] = im; res(im); }; im.onerror = () => res(null); im.src = u; }));
-  const setFor = (k) => SCENES.flatMap(s => [A(`${s}_${k}.jpg`), A(`${s}_mask_${k}.png`)]);
-  const urls = [...setFor(KEY), ...$$('img:not([data-scene])').map(i => i.getAttribute('src')).filter(Boolean)];
+  // images retry up to 3 times (slow or flaky mobile data), then resolve null so nothing ever hangs
+  const fetchImg = (u, tries = 0) => new Promise(res => { const im = new Image(); im.decoding = 'async';
+    im.onload = () => res(im); im.onerror = () => tries < 3 ? setTimeout(() => fetchImg(u, tries + 1).then(res), 800 * 2 ** tries) : res(null);
+    im.src = tries ? `${u}${u.includes('?') ? '&' : '?'}r=${tries}` : u; });
+  const load = (u) => cache[u] || (cache[u] = fetchImg(u).then(im => { if (im) IM[u] = im; return im; }));
+  const sceneUrls = (s, k) => [A(`${s}_${k}.webp`), A(`${s}_mask_${k}.png`)];
+  // the loader waits only for what the opening shows: envelope, garden painting, hero flowers, fonts
+  const urls = [...sceneUrls('garden', KEY), ...$$('#card img, #s-invite img.corner').map(i => i.getAttribute('src')).filter(Boolean)];
   const prog = { v: 0 }, cnt = $('#loader .count'), bar = $('#loader .rule b');
   let loaded = 0;
   const all = Promise.all(urls.map(u => load(u).then(() => { loaded++; gsap.to(prog, { v: loaded / urls.length, duration: .6, overwrite: true }); })))
@@ -40,7 +50,7 @@
   uniform vec4 uL[16];   // lights: x, y, kind (1 hanging lamp, 2 flame), phase
   float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
   float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-  float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<5;i++){ v+=a*n(p); p=p*2.03+vec2(1.7,9.2); a*=.5; } return v; }
+  float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<${MOBILE ? 3 : 5};i++){ v+=a*n(p); p=p*2.03+vec2(1.7,9.2); a*=.5; } return v; }
   void main(){
     vec2 sc = uCan > uImg ? vec2(1., uImg/uCan) : vec2(uCan/uImg, 1.);
     vec2 uv = (vUv-.5)*sc+.5; float t = uTime;
@@ -108,14 +118,14 @@
       document.addEventListener('visibilitychange', () => document.hidden ? this.stop() : this.visible && this.start());
     }
     setImages(img, mask) {
-      if (!this.ok || !img) return; const gl = this.gl; this.img = img;
+      if (!this.ok || !img) return; const gl = this.gl; this.img = img; this.c.style.opacity = 1;
       [img, mask].forEach((im, i) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, this.tex[i]);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, im);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); });
       gl.uniform2f(this.U.uTexel, 1.4 / img.width, 1.4 / img.height); gl.uniform1f(this.U.uImg, img.width / img.height); this.draw();
     }
-    resize() { const d = Math.min(devicePixelRatio || 1, 2); const r = this.c.getBoundingClientRect();
+    resize() { const d = Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 2); const r = this.c.getBoundingClientRect();
       this.c.width = Math.max(2, Math.round(r.width * d)); this.c.height = Math.max(2, Math.round(r.height * d));
       if (this.gl) { this.gl.viewport(0, 0, this.c.width, this.c.height); this.gl.uniform1f(this.U.uCan, r.width / Math.max(1, r.height)); } this.draw(); }
     now() { return (performance.now() - this.t0) / 1000; }
@@ -125,7 +135,8 @@
       if (!still) this.t = this.now(); gl.uniform1f(U.uTime, this.t || 0); gl.uniform1f(U.uReveal, this.reveal); gl.uniform1f(U.uSheen, this.sheen);
       gl.uniform1f(U.uVel, this.vel); gl.uniform3fv(U.uBase, this.base); gl.uniform4fv(U.uDrop, this.drops); gl.uniform4fv(U.uL, this.lights); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
     start() { if (this.running || !this.ok) return; this.running = true;
-      const loop = () => { if (!this.running) return; this.draw(); if (still && !this.busy) { this.running = false; return; } requestAnimationFrame(loop); };
+      let f = 0; const loop = () => { if (!this.running) return; if (!MOBILE || this.busy || (f++ & 1) === 0) this.draw();
+        if ((still || lite) && !this.busy) { this.running = false; return; } requestAnimationFrame(loop); };
       requestAnimationFrame(loop); }
     stop() { this.running = false; }
     // map image-space (fx, fy) to element-space fractions for the current cover crop
@@ -167,17 +178,18 @@
       c.addEventListener('webglcontextlost', () => dropCloth(img));
       this.resize();
     }
-    resize() { const d = Math.min(devicePixelRatio || 1, 2), w = this.img.clientWidth, h = this.img.clientHeight; if (!w) return;
+    resize() { const d = Math.min(devicePixelRatio || 1, MOBILE ? 1.25 : 2), w = this.img.clientWidth, h = this.img.clientHeight; if (!w) return;
       this.c.width = Math.round(w * d); this.c.height = Math.round(h * d); this.gl.viewport(0, 0, this.c.width, this.c.height); this.draw(); }
     draw() { const gl = this.gl; gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.uniform1f(this.uT, (performance.now() - this.t0) / 1000); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
-    start() { if (this.running) return; this.running = true; const loop = () => { if (!this.running) return; this.draw(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
+    start() { if (this.running) return; this.running = true; let f = 0; const loop = () => { if (!this.running) return; if (!MOBILE || (f++ & 1) === 0) this.draw(); requestAnimationFrame(loop); }; requestAnimationFrame(loop); }
     stop() { this.running = false; }
     destroy() { this.stop(); removeEventListener('resize', this.onR); document.removeEventListener('visibilitychange', this.onV);
       const x = this.gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext();
       this.c.remove(); this.img.style.visibility = ''; cloths.delete(this); }
   }
   const clothFor = new Map(), clothVis = new Map();
-  const makeCloth = (im) => { if (still || reduce || clothFor.get(im) || !im.naturalWidth) return; const c = new Cloth(im); if (c.ok) { clothFor.set(im, c); c.start(); } };
+  const makeCloth = (im) => { if (!im.naturalWidth) { im.addEventListener('load', () => clothVis.get(im) && makeCloth(im), { once: true }); return; }
+    if (still || reduce || lite || clothFor.get(im)) return; const c = new Cloth(im); if (c.ok) { clothFor.set(im, c); c.start(); } };
   const dropCloth = (im) => { const c = clothFor.get(im); if (c) { c.destroy(); clothFor.delete(im); } };
   const clothIO = new IntersectionObserver(es => es.forEach(e => { clothVis.set(e.target, e.isIntersecting); e.isIntersecting ? makeCloth(e.target) : dropCloth(e.target); }), { rootMargin: '120px' });
 
@@ -253,10 +265,10 @@
       if (kind === 'line') tl.from($$('.line > span', el).length ? $$('.line > span', el) : el, { yPercent: 115, duration: 1.3, stagger: .12, ease: 'expo.out' }, at);
       else if (kind === 'write') tl.fromTo(el, { clipPath: 'inset(-40% 100% -40% -12%)', opacity: .2 },   // script lines are drawn on, left to right, like ink
         { clipPath: 'inset(-40% -12% -40% -12%)', opacity: 1, duration: 2.1, ease: 'power2.inOut', clearProps: 'clipPath', immediateRender: true }, at);
-      else if (kind === 'chars') tl.from(splitChars(el), { yPercent: 70, opacity: 0, filter: 'blur(10px)', duration: 1.4, stagger: .05, ease: 'expo.out' }, at);
+      else if (kind === 'chars') tl.from(splitChars(el), { yPercent: 70, opacity: 0, duration: 1.4, stagger: .05, ease: 'expo.out' }, at);
       else if (kind === 'draw') tl.add(() => drawPaths(el, +el.dataset.dur || 1.6), at);
       else if (kind === 'amp') tl.from(el, { opacity: 0, scale: .3, rotate: -25, duration: 1.4, ease: 'back.out(1.8)' }, at);
-      else tl.from(el, { opacity: 0, y: 24, filter: 'blur(6px)', duration: 1.2, ease: 'power3.out' }, at);
+      else tl.from(el, { opacity: 0, y: 24, duration: 1.2, ease: 'power3.out' }, at);
     });
     if (!opts.manual) ScrollTrigger.create({ trigger: scope, start: 'top 70%', once: true, onEnter: () => tl.play() });
     return tl;
@@ -283,15 +295,27 @@
         const el = document.createElement('i'); el.className = 'glow ' + (fy < .3 ? 'hang' : 'flame'); const sz = (w >= 1 ? 15 : w >= .6 ? 9 : 6) * (0.6 + .4 * Math.min(1, w));
         Object.assign(el.style, { left: x * 100 + '%', top: y * 100 + '%', width: sz + 'vmin', height: sz + 'vmin', animationDuration: (2.2 + (i * .37) % 1.8) + 's', animationDelay: -((i * .61) % 2) + 's' });
         wrap.appendChild(el); }); });
-    const apply = async () => {
-      await Promise.all(SCENES.map(async s => { const [im, mk] = await Promise.all([load(A(`${s}_${KEY}.jpg`)), load(A(`${s}_mask_${KEY}.png`))]);
-        if (LQ[s]) LQ[s].setImages(im, mk); }));
-      $$('#s-rsvp .strip img.sky').forEach(i => i.src = A(`strip_${KEY}.webp`)); placeGlows(); };
-    await apply();
-    $$('img.couple').forEach(im => (im.complete ? Promise.resolve() : im.decode().catch(() => {})).then(() => clothIO.observe(im)));
+    const wanted = new Set(['garden']);
+    const hydrate = (root) => { $$('source[data-srcset]', root).forEach(el => { el.srcset = el.dataset.srcset; el.removeAttribute('data-srcset'); });
+      $$('img[data-src]', root).forEach(el => { el.src = el.dataset.src; el.removeAttribute('data-src'); });
+      // a static painting that fails (flaky data) retries as JPEG, then once more, instead of showing a broken icon
+      $$('picture.paint-fallback img', root).forEach(im => { if (im._guard) return; im._guard = 1; let n = 0;
+        im.addEventListener('error', () => { if (n++ > 2) return; $$('source', im.parentNode).forEach(x => x.remove());
+          setTimeout(() => { im.src = A(`${im.dataset.scene}_${KEY}.jpg?r=${n}`); }, 700 * n); }); }); };
+    const ensure = async (s) => { wanted.add(s); const k = KEY; const sec = $(`section.scene[data-theme="${s}"]`); if (sec) hydrate(sec); const [im, mk] = await Promise.all(sceneUrls(s, k).map(load));
+      if (k !== KEY) return; const L = LQ[s];
+      if (L && L.ok) { if (im && mk) L.setImages(im, mk); else { L.ok = false; L.c.remove(); } }   // failed: static painting stays
+      placeGlows(); };
+    const apply = () => Promise.all([...wanted].map(ensure));
+    const sceneIO = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) ensure(e.target.dataset.theme); }), { rootMargin: '150% 0px' });
+    $$('section.scene[data-theme]').forEach(sec => sec.dataset.theme !== 'garden' && sceneIO.observe(sec));
+    const strip = $('#s-rsvp .strip img.sky');
+    new IntersectionObserver((es, o) => es.forEach(e => { if (e.isIntersecting) { strip.src = A(`strip_${KEY}.webp`); hydrate($('#s-rsvp')); o.disconnect(); } }), { rootMargin: '150% 0px' }).observe($('#s-rsvp'));
+    await ensure('garden');
+    $$('img.couple').forEach(im => clothIO.observe(im));
     buildArches(); buildFrame();
     let rT; addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => { buildArches(); buildFrame(); const k = aspectKey();
-      if (k !== KEY) { KEY = k; apply(); } else placeGlows(); ScrollTrigger.refresh(); }, 160); });
+      if (k !== KEY) { KEY = k; apply(); if (strip.getAttribute('src')) strip.src = A(`strip_${KEY}.webp`); } else placeGlows(); ScrollTrigger.refresh(); }, 160); });
 
     // pointer ripples on whichever painting is under the finger
     const ripple = (e, s) => Object.values(LQ).forEach(L => { if (!L.ok) return; const r = L.c.getBoundingClientRect();
@@ -316,7 +340,7 @@
       if (fine && !still) { const qs = $$('#s-invite .corner, #card').map(el => ({ el, k: el.id === 'card' ? -6 : 14 }));
         addEventListener('pointermove', e => { const nx = e.clientX / innerWidth - .5, ny = e.clientY / innerHeight - .5;
           qs.forEach(({ el, k }) => gsap.to(el, { x: nx * k, y: ny * k, duration: 1.4, ease: 'power3.out', overwrite: 'auto' })); }); }
-      $$('section.scene:not(#s-invite)').forEach(sec => gsap.fromTo($$('canvas.paint, img.paint-fallback', sec), { yPercent: -5 }, { yPercent: 5, ease: 'none',
+      $$('section.scene:not(#s-invite)').forEach(sec => gsap.fromTo($$('canvas.paint, picture.paint-fallback', sec), { yPercent: -4, scale: 1.1 }, { yPercent: 4, scale: 1.1, ease: 'none',
         scrollTrigger: { trigger: sec, start: 'top bottom', end: 'bottom top', scrub: true } }));
     }
 
@@ -343,8 +367,12 @@
       .fromTo($$('#card .n, #card .a'), { clipPath: 'inset(-40% 100% -40% -12%)' }, { clipPath: 'inset(-40% -12% -40% -12%)', duration: 1.8, stagger: .35, ease: 'power2.inOut', clearProps: 'clipPath' }, 1.5)
       .from($$('#card .cel, #card .ur, #card .orn'), { opacity: 0, y: 12, duration: 1.2, stagger: .1, ease: 'power3.out' }, 2.4)
       .from('#card .hint', { opacity: 0, duration: 1 }, 2.4);
-    const fxInit = () => { fx.theme('garden'); fx.level(.25); };
+    let openedOnce = false;
+    const fxInit = () => { fx.theme('garden'); fx.level(openedOnce ? (lite ? .4 : 1) : .25); if (window.FX3D) window.FX3D.setPaused(still); };
     window.FX3D ? fxInit() : addEventListener('fx3d-ready', fxInit, { once: true });
+    let fxLoading = false;
+    const loadFX = () => { if (fxLoading || reduce || !window.FXSRC) return; fxLoading = true; import(window.FXSRC).catch(() => {}); };
+    if (!MOBILE) setTimeout(loadFX, 1500);   // desktops: petals already drift over the envelope; phones: loaded on the tap
 
     // ------- music: original Raag Yaman piece; starts on the envelope tap (a user gesture, so phones allow it)
     const music = $('#music'), snd = $('#sound');
@@ -379,7 +407,7 @@
       .add(() => { intro.style.display = 'none'; document.body.classList.remove('locked'); lenis.start(); ScrollTrigger.refresh(); playing = false; }, 5.2)
       .fromTo('.cue', { opacity: 0 }, { opacity: 1, duration: 1.2 }, 7.2);
     const open = () => {
-      if (opened || playing) return; opened = playing = true;
+      if (opened || playing) return; opened = playing = true; openedOnce = true; loadFX();
       startMusic();
       $$('#card .halo, #card .sway').forEach(el => el.style.animation = 'none');
       if (G) G.drop(.5, .38, 1.6);
@@ -410,6 +438,14 @@
     const fxPause = () => window.FX3D && window.FX3D.setPaused(still);
     window.FX3D ? fxPause() : addEventListener('fx3d-ready', fxPause, { once: true });
     setStill(still);
+    if (!still) {
+      let frames = 0, t0 = 0, slow = 0;
+      const meter = (t) => { if (!openedOnce || document.hidden) { t0 = 0; return; } if (!t0) { t0 = t; frames = 0; return; } frames++;
+        if (t - t0 >= 2) { const fps = frames / (t - t0); t0 = t; frames = 0; slow = fps < 26 ? slow + 1 : 0;
+          if (slow >= 2) { lite = true; document.documentElement.classList.add('lite'); gsap.ticker.remove(meter);
+            clothVis.forEach((on, im) => dropCloth(im)); fx.level(.4); } } };
+      gsap.ticker.add(meter);
+    }
     $('.cue').addEventListener('click', () => lenis.scrollTo($('#s-invite').nextElementSibling, { duration: 2 }));
   });
 })();

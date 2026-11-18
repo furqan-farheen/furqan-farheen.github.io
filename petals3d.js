@@ -25,7 +25,7 @@ catch (e) { renderer = null; }          // no WebGL: the painted scenes stay, pe
 if (!renderer && canvas) canvas.style.display = 'none';
 if (renderer) canvas.addEventListener('webglcontextlost', () => { canvas.style.display = 'none'; paused = true; });
 if (renderer) {
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1.25 : 1.6));
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small ? 1 : 1.5));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(42, 1, .1, 60);
