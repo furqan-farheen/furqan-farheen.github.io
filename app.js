@@ -138,8 +138,9 @@
   function buildArches() {
     $$('.arch').forEach(box => { const svg = $('svg.paper', box); const w = box.clientWidth, h = box.clientHeight; if (!w) return;
       svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-      const outer = cuspedArch(w / 2, h, w, h, .70, 9, .028);
-      const inner = cuspedArch(w / 2, h - w * .03, w * .92, h - w * .07, .70, 9, .028);
+      const sf = Math.max(.55, 1 - .5 * w / h), sfi = Math.max(.55, 1 - .5 * w * .92 / (h - w * .07));   // curve height tied to width, so tall cards keep the same crown
+      const outer = cuspedArch(w / 2, h, w, h, sf, 9, .028);
+      const inner = cuspedArch(w / 2, h - w * .03, w * .92, h - w * .07, sfi, 9, .028);
       $$('.a-fill, .a-lip, .a-clip', svg).forEach(p => p.setAttribute('d', pathD(outer, true)));
       const g = $('.a-gold', svg); g.setAttribute('d', pathD(inner.slice(1, -1), false)); g.setAttribute('stroke-width', Math.max(.8, w * .0035)); });
   }
@@ -178,6 +179,8 @@
     $$('[data-r]', scope).forEach(el => {
       const at = +el.dataset.at || 0, kind = el.dataset.r;
       if (kind === 'line') tl.from($$('.line > span', el).length ? $$('.line > span', el) : el, { yPercent: 115, duration: 1.3, stagger: .12, ease: 'expo.out' }, at);
+      else if (kind === 'write') tl.fromTo(el, { clipPath: 'inset(-40% 100% -40% -12%)', opacity: .2 },   // script lines are drawn on, left to right, like ink
+        { clipPath: 'inset(-40% -12% -40% -12%)', opacity: 1, duration: 2.1, ease: 'power2.inOut', clearProps: 'clipPath', immediateRender: true }, at);
       else if (kind === 'chars') tl.from(splitChars(el), { yPercent: 70, opacity: 0, filter: 'blur(10px)', duration: 1.4, stagger: .05, ease: 'expo.out' }, at);
       else if (kind === 'draw') tl.add(() => drawPaths(el, +el.dataset.dur || 1.6), at);
       else if (kind === 'amp') tl.from(el, { opacity: 0, scale: .3, rotate: -25, duration: 1.4, ease: 'back.out(1.8)' }, at);
@@ -263,7 +266,8 @@
       .to('#loader', { clipPath: 'inset(0 0 100% 0)', duration: 1.2, ease: 'expo.inOut' }, .4)
       .add(() => $('#loader').remove())
       .to(card, { opacity: 1, scale: 1, duration: 1.8, ease: 'expo.out' }, 1.0)
-      .from($$('#card .n, #card .a, #card .cel, #card .ur, #card .orn'), { opacity: 0, y: 14, filter: 'blur(6px)', duration: 1.4, stagger: .1, ease: 'power3.out' }, 1.6)
+      .fromTo($$('#card .n, #card .a'), { clipPath: 'inset(-40% 100% -40% -12%)' }, { clipPath: 'inset(-40% -12% -40% -12%)', duration: 1.8, stagger: .35, ease: 'power2.inOut', clearProps: 'clipPath' }, 1.5)
+      .from($$('#card .cel, #card .ur, #card .orn'), { opacity: 0, y: 12, duration: 1.2, stagger: .1, ease: 'power3.out' }, 2.4)
       .from('#card .hint', { opacity: 0, duration: 1 }, 2.4);
     const fxInit = () => { fx.theme('garden'); fx.level(.25); };
     window.FX3D ? fxInit() : addEventListener('fx3d-ready', fxInit, { once: true });

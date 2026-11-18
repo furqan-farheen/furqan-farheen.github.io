@@ -326,3 +326,117 @@ section.ev { display: flow-root; }
 .arch .bism .callig + .callig { margin-top: -.45em; }
 .ev .insha { font-size: 7.4cqw; margin: -1cqw 0 1cqw; }
 .arch .bism { top: 5%; } .arch .bism .callig + .callig { margin-top: -.18em; }
+
+/* ---------------------------------------------------------------- v4 type: Armelie (script) + Yulltan (Arabic-styled caps) */
+@font-face { font-family: 'Armelie'; src: url(fonts/Armelie.woff2) format('woff2'); font-display: block; }
+@font-face { font-family: 'Yulltan'; src: url(fonts/Yulltan.woff2) format('woff2'); font-display: block; }
+:root { --script: 'Armelie', 'Corm', Georgia, serif; --deco: 'Yulltan', 'Cinzel', serif; }
+.caps { font-family: var(--deco); letter-spacing: .08em; }
+[data-r="write"] .line { overflow: visible; padding: 0; margin: 0; }
+#loader .mono { font-family: var(--script); }
+/* envelope */
+#card .n { font-family: var(--script); font-size: 12.5cqw; letter-spacing: 0; line-height: 1.1; }
+#card .a { font-family: var(--script); font-style: normal; font-size: 10cqw; }
+#card .cel { font-family: var(--deco); font-size: 3.9cqw; letter-spacing: .12em; }
+/* hero arch */
+.arch .content { overflow: visible; }
+.arch .fam { font-size: 4.6cqw; letter-spacing: .12em; }
+.arch .name { font-family: var(--script); font-size: 16.5cqw; line-height: 1.12; letter-spacing: 0; }
+.arch .amp { font-family: var(--script); font-style: normal; font-size: 12cqw; line-height: .9; margin: -1cqw 0 -1cqw; }
+.arch .inv { font-family: var(--script); font-style: normal; font-size: 6.6cqw; line-height: 1.45; margin-top: 4cqw; }
+/* event stage + card */
+.ev-title .t { font-family: var(--deco); font-style: normal; font-size: clamp(50px, 12vmin, 120px); letter-spacing: .02em; line-height: 1; }
+.ev-title .no { font-family: var(--deco); letter-spacing: .3em; }
+.ev .evhost { font-size: 4.1cqw; letter-spacing: .08em; line-height: 1.35; padding: 0 4cqw; }
+.ev .evinv { font-family: var(--script); font-style: normal; font-size: 5.3cqw; line-height: 1.35; margin-top: 1cqw; }
+.ev .evname { font-family: var(--script); font-style: normal; font-size: 15cqw; line-height: 1.15; margin-top: 0; }
+.ev .evcouple { font-family: var(--script); font-style: normal; font-size: 6.2cqw; line-height: 1.35; margin-top: 1cqw; }
+.ev .evcouple i { font-style: normal; }
+.ev .orn { margin: 2.6cqw auto 2.4cqw; }
+.ev .evdate { font-size: 4.6cqw; letter-spacing: .1em; }
+.ev .evtime { font-family: var(--deco); font-weight: 400; font-size: 6.8cqw; margin-top: 2.4cqw; letter-spacing: .04em; }
+.ev .evtime2 { font-family: var(--deco); font-weight: 400; font-size: 5.4cqw; letter-spacing: .04em; }
+.ev .evvenue { font-family: var(--deco); font-weight: 400; font-size: 6.4cqw; line-height: 1.15; margin-top: 2.6cqw; letter-spacing: .03em; }
+.ev .evaddr { font-size: 4.3cqw; }
+.ev .evdress { font-size: 3.9cqw; letter-spacing: .1em; }
+.pill { font-family: var(--deco); font-size: max(11px, 3.6cqw); letter-spacing: .1em; }
+/* night + closing */
+#s-night .msg { font-family: var(--script); font-style: normal; font-size: clamp(32px, 6.4vmin, 76px); line-height: 1.3; }
+#s-rsvp .lead { font-family: var(--script); font-style: normal; font-size: 2em; line-height: 1.35; }
+#s-rsvp .lab { font-family: var(--deco); font-size: .82em; letter-spacing: .24em; }
+#s-rsvp .rcn { font-family: var(--script); font-style: normal; font-size: 2em; line-height: 1.2; }
+#s-rsvp .rcd { font-family: var(--deco); font-size: .8em; letter-spacing: .12em; }
+#s-rsvp .rgt { font-family: var(--script); font-style: normal; font-size: 1.35em; }
+#s-rsvp .soft { font-family: var(--script); font-style: normal; }
+#s-rsvp .sign { font-family: var(--script); font-size: 2.5em; line-height: 1.25; }
+#s-rsvp .sign i { font-style: normal; }
+.btn { font-family: var(--deco); font-size: 13px; letter-spacing: .14em; }
+footer { font-family: var(--deco); font-size: 12px; letter-spacing: .2em; }
+/* Yulltan is only legible in Title Case: never force capitals */
+.caps, #card .cel, .pill, .btn, footer, #s-rsvp .lab, #s-rsvp .rcd, .ev-title .no, .ev .evdress { text-transform: none; letter-spacing: .04em; }
+#card .cel { font-size: 5.4cqw; }
+.arch .fam { font-size: 5.6cqw; letter-spacing: .03em; }
+.arch .inv { font-size: 5.8cqw; }
+.ev .evhost { font-size: 5cqw; letter-spacing: .02em; }
+.ev .evdate { font-size: 5.6cqw; letter-spacing: .03em; }
+.ev .evdress { font-size: 4.6cqw; }
+.pill { font-size: max(13px, 4cqw); letter-spacing: .04em; }
+.btn { font-size: 16px; letter-spacing: .05em; }
+#s-rsvp .lab { font-size: 1em; letter-spacing: .1em; }
+#s-rsvp .rcd { font-size: .95em; letter-spacing: .04em; }
+.ev-title .no { font-size: clamp(14px, 1.6vmin + 6px, 18px); letter-spacing: .12em; }
+footer { font-size: 14px; letter-spacing: .1em; }
+
+/* ------------------------------------------- event cards grow with their text (never spill out) */
+section.ev .arch { aspect-ratio: auto; height: auto; }
+section.ev .arch .content { position: relative; inset: auto; min-height: calc(100cqw / .6); padding: 31% 8% 10%; justify-content: center; }
+.ev .evur { position: static; font-size: 8cqw; line-height: 1.5; margin-bottom: 2cqw; }
+.ev .evhost { font-size: 4.6cqw; }
+.ev .evinv { font-size: 4.7cqw; line-height: 1.3; }
+.ev .evname { font-size: 13.5cqw; line-height: 1.2; }
+.ev .evcouple { font-family: var(--deco); font-size: 5.2cqw; line-height: 1.3; margin-top: 1.4cqw; color: var(--ink); }
+.ev .insha { font-size: 6.4cqw; margin: 0 0 .6cqw; }
+.ev .evdate { font-size: 5cqw; }
+.ev .evtime { font-size: 6cqw; margin-top: 2cqw; }
+.ev .evtime2 { font-size: 4.8cqw; }
+.ev .evvenue { font-size: 5.6cqw; margin-top: 2.2cqw; }
+.ev .evaddr { font-size: 4cqw; line-height: 1.3; margin-top: .6cqw; }
+.ev .evdress { font-size: 4.2cqw; margin-top: 2cqw; }
+.ev .evbtns { margin-top: 4cqw; gap: 2cqw; }
+.pill { font-size: max(12px, 3.7cqw); padding: .7em 1.1em; }
+@media (min-aspect-ratio: 1/1) {
+  section.ev .arch { top: 50%; height: auto; width: min(38vw, 46svh, 560px); translate: -50% -50%; }
+  section.ev .arch .content { min-height: calc(100cqw / .62); }
+}
+/* ------------------------------------------- spacing so swashes and calligraphy never collide */
+.arch .bism .callig + .callig { margin-top: .12em; }
+.arch .bism { top: 4.5%; font-size: 7.4cqw; }
+.arch .name { line-height: 1.5; }
+.arch .amp { line-height: 1.2; margin: 0; }
+.arch .inv { line-height: 1.75; margin-top: 5cqw; }
+.ev .evinv { line-height: 1.5; }
+.ev .evname { line-height: 1.55; margin: 1cqw 0; }
+#s-rsvp .rcn { line-height: 1.55; }
+#s-rsvp .verse { gap: .55em; }
+#s-rsvp .verse .ar { line-height: 2.1; }
+/* hosts: plain, legible serif, kept well inside the arch */
+section.ev .arch .content { padding-top: 36%; }
+.ev .evhost { font-family: 'Corm', Georgia, serif; font-weight: 600; font-size: 5.4cqw; letter-spacing: .03em; line-height: 1.3;
+  max-width: 80%; margin: 0 auto; text-wrap: balance; }
+.ev .evhost .line { overflow: visible; }
+.ev .evname { margin: 3cqw 0 1cqw; }
+.arch .amp { margin-top: 2.5cqw; }
+.arch .bism .callig + .callig { margin-top: .32em; }
+.arch .bism { top: 3.5%; font-size: 6.8cqw; }
+.ev .evhost { max-width: 90%; }
+.ev .evname { margin-top: 4.5cqw; }
+.arch .amp { margin-top: 4cqw; }
+.arch .bism .callig + .callig { margin-top: .45em; }
+.arch .amp { margin: 6cqw 0 3cqw; }
+.ev .evname { margin-top: 6.5cqw; }
+#s-night .msg { line-height: 1.55; }
+#s-invite .arch .content { padding-top: 33%; padding-bottom: 6%; }
+#s-invite .arch .name { font-size: 14.5cqw; }
+#s-invite .arch .amp { margin: 5cqw 0 2cqw; font-size: 11cqw; }
+#s-invite .arch .inv { margin-top: 3.5cqw; }
+#s-rsvp .lead { font-size: 1.65em; }
