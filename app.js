@@ -386,8 +386,10 @@
     const fadeTo = (v, d = 2.5) => gsap.to(music, { volume: v, duration: d, ease: 'sine.inOut', overwrite: true });
     const startMusic = () => { if (!music) return; music.volume = 0; const p = music.play(); if (p && p.catch) p.catch(() => {});
       musicOn = true; snd.className = 'on'; fadeTo(.55, 3); };
-    const stopMusic = () => { musicOn = false; snd.className = 'off'; gsap.to(music, { volume: 0, duration: .8, onComplete: () => music.pause() }); };
-    if (snd) snd.addEventListener('click', () => (musicOn ? stopMusic() : startMusic()));
+    let userMuted = false;   // the guest switched the music off themselves (the pause button then leaves it off)
+    const stopMusic = () => { musicOn = false; snd.className = 'off'; gsap.to(music, { volume: 0, duration: .8, onComplete: () => music.pause() });
+      setTimeout(() => { if (!musicOn) music.pause(); }, 950); };
+    if (snd) snd.addEventListener('click', () => { if (musicOn) { userMuted = true; stopMusic(); } else { userMuted = false; startMusic(); } });
     document.addEventListener('visibilitychange', () => { if (!music) return; if (document.hidden) music.pause(); else if (musicOn) music.play().catch(() => {}); });
 
     // ------- opening: bow loosens, ribbon halves part, flap swings on its top hinge, invitation rises
@@ -439,7 +441,9 @@
       if (mot) { mot.setAttribute('aria-pressed', String(v)); mot.setAttribute('aria-label', v ? 'Play animation' : 'Pause animation'); }
       if (window.FX3D) window.FX3D.setPaused(v);
       glints.forEach(t => v ? t.pause() : t.play()); clothVis.forEach((on, im) => v || !on ? dropCloth(im) : makeCloth(im));
-      Object.values(LQ).forEach(L => { if (L.ok && L.visible) { L.stop(); L.start(); } }); };
+      Object.values(LQ).forEach(L => { if (L.ok && L.visible) { L.stop(); L.start(); } });
+      // the pause button pauses the music too, and play brings it back (unless the guest muted it themselves)
+      if (openedOnce && music) { if (v && musicOn) stopMusic(); else if (!v && !musicOn && !userMuted) startMusic(); } };
     if (mot) { mot.classList.add('ready'); mot.addEventListener('click', () => setStill(!still)); }
     const fxPause = () => window.FX3D && window.FX3D.setPaused(still);
     window.FX3D ? fxPause() : addEventListener('fx3d-ready', fxPause, { once: true });
