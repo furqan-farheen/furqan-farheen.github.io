@@ -11,6 +11,25 @@
   try { const v = localStorage.getItem('ff-still'); if (v !== null) still = v === '1'; } catch (e) {}
   document.documentElement.classList.toggle('still', still);
   const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  // personal greeting: a link ending in ?to=Name shows "Specially for Name" on the envelope.
+  // Everything after "to=" is the name (so "&" inside a name survives); it shrinks to one line, or two for long names.
+  try {
+    const raw = (location.search.match(/[?&]to=(.*)$/) || [])[1] || '';
+    let to = ''; try { to = decodeURIComponent(raw.replace(/\+/g, ' ')); } catch (e) { to = raw.replace(/\+/g, ' '); }
+    to = to.replace(/[<>{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const gb = document.querySelector('#card .guest'), cardEl = document.querySelector('#card');
+    if (to && gb) {
+      const nm = gb.querySelector('.gname'); nm.textContent = to; gb.hidden = false; cardEl.classList.add('has-guest');
+      document.title = `For ${to} · ${document.title}`;
+      const lines = () => { const cs = getComputedStyle(nm); return Math.round((nm.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)) / parseFloat(cs.lineHeight)); };
+      const fits = () => nm.scrollWidth <= nm.clientWidth + 1;
+      const fit = () => { if (!cardEl.clientWidth) return;
+        for (let f = 8.6; f >= 5.6; f -= .2) { nm.style.fontSize = f + 'cqw'; if (lines() === 1 && fits()) return; }
+        for (let f = 6.4; f >= 4.2; f -= .2) { nm.style.fontSize = f + 'cqw'; if (lines() <= 2 && fits()) return; } };
+      fit(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+      let gT; addEventListener('resize', () => { clearTimeout(gT); gT = setTimeout(fit, 150); });
+    }
+  } catch (e) {}
   // phones & tablets get a lighter renderer (fewer pixels, cheaper paint shader, 30 fps effects)
   const MOBILE = !fine || Math.min(innerWidth, innerHeight) < 820;
   let lite = false;                       // switched on automatically if the device can't keep up
