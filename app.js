@@ -16,7 +16,7 @@
   try {
     const raw = (location.search.match(/[?&]to=(.*)$/) || [])[1] || '';
     let to = ''; try { to = decodeURIComponent(raw.replace(/\+/g, ' ')); } catch (e) { to = raw.replace(/\+/g, ' '); }
-    to = to.replace(/[<>{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    to = to.replace(/_/g, ' ').replace(/[<>{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
     const gb = document.querySelector('#card .guest'), cardEl = document.querySelector('#card');
     if (to && gb) {
       const nm = gb.querySelector('.gname'); nm.textContent = to; gb.hidden = false; cardEl.classList.add('has-guest');

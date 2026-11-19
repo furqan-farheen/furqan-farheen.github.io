@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Personal invitation links</title>
+<style>
+@font-face { font-family: 'Armelie'; src: url(../fonts/Armelie.woff2) format('woff2'); }
+@font-face { font-family: 'Yulltan'; src: url(../fonts/Yulltan.woff2) format('woff2'); }
+@font-face { font-family: 'Corm'; src: url(../fonts/Cormorant-Medium.woff2) format('woff2'); }
+:root { --ivory: #F8F3E9; --paper: #FFFDF8; --emerald: #174C40; --gold: #C4A46B; --golddk: #8A6A32; --text: #2B3B35; --line: #E4D8C2; }
+* { box-sizing: border-box; margin: 0; }
+body { background: var(--ivory); color: var(--text); font-family: 'Corm', Georgia, serif; font-size: 18px; padding: 28px 16px 48px; }
+main { max-width: 520px; margin: 0 auto; }
+h1 { font-family: 'Armelie', serif; font-weight: 400; color: var(--emerald); font-size: 44px; text-align: center; line-height: 1.3; padding: .1em 0 .2em; margin-bottom: 10px; }
+.sub { text-align: center; color: var(--golddk); margin-bottom: 26px; }
+label { display: block; font-family: 'Yulltan', serif; color: var(--golddk); letter-spacing: .08em; font-size: 15px; margin: 18px 0 6px; }
+input, select { width: 100%; font: inherit; font-size: 19px; color: var(--text); background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+input:focus, select:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+.card { margin-top: 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 20px; text-align: center; }
+.for { font-family: 'Yulltan', serif; color: var(--golddk); letter-spacing: .12em; font-size: 14px; }
+.nm { font-family: 'Armelie', serif; color: var(--emerald); font-size: 34px; line-height: 1.35; padding: .05em .3em .25em; overflow-wrap: anywhere; min-height: 1.4em; }
+.link { margin-top: 10px; font-size: 15px; word-break: break-all; background: var(--ivory); border-radius: 8px; padding: 10px 12px; text-align: left; }
+.btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.btns > * { font-family: 'Yulltan', serif; font-size: 16px; letter-spacing: .04em; border-radius: 999px; padding: 12px 10px; border: 1px solid var(--gold);
+  background: none; color: var(--golddk); cursor: pointer; text-decoration: none; text-align: center; }
+.btns .wa { background: var(--emerald); border-color: var(--emerald); color: #fff; }
+.btns .open { grid-column: 1 / -1; }
+.note { font-size: 15px; color: #6b6458; margin-top: 18px; line-height: 1.45; text-align: center; }
+[aria-disabled="true"] { opacity: .45; pointer-events: none; }
+</style></head>
+<body><main>
+<h1>Personal links</h1>
+<p class="sub">Type a guest's name, choose their invitation, then send.</p>
+<label for="nm">Guest name</label>
+<input id="nm" autocomplete="off" maxlength="60" placeholder="e.g. Mr &amp; Mrs Hamid Saeed">
+<label for="set">Invitation</label>
+<select id="set"><option value="">Mehndi · Barat · Walima</option><option value="mehndi-barat">Mehndi · Barat</option><option value="mehndi-walima">Mehndi · Walima</option><option value="barat-walima">Barat · Walima</option><option value="mehndi">Mehndi</option><option value="barat">Barat</option><option value="walima">Walima</option></select>
+<div class="card" aria-live="polite">
+  <div class="for">Specially for</div>
+  <div class="nm" id="pv"></div>
+  <div class="link" id="out"></div>
+  <div class="btns">
+    <button type="button" id="copy">Copy link</button>
+    <a class="wa" id="wa" target="_blank" rel="noopener">Send on WhatsApp</a>
+    <a class="open" id="open" target="_blank" rel="noopener">Open to check</a>
+  </div>
+</div>
+<p class="note">The link uses _ in place of spaces so WhatsApp and SMS keep the whole name. The guest sees the name written normally on the envelope.</p>
+</main>
+<script>
+(() => {
+  const SITE = 'https://furqan-farheen.github.io/';
+  const $ = (id) => document.getElementById(id);
+  const tidy = (v) => v.replace(/[<>{}_]/g, ' ').replace(/\s+/g, ' ').trim();
+  // spaces become _; everything else is percent-encoded except & and ' (kept readable; messaging apps keep them inside links)
+  const enc = (v) => encodeURIComponent(v).replace(/%20/g, '_').replace(/%26/g, '&').replace(/%27/g, "'");
+  const link = () => { const n = tidy($('nm').value), s = $('set').value; return SITE + (s ? s + '/' : '') + (n ? '?to=' + enc(n) : ''); };
+  const update = () => { const n = tidy($('nm').value), u = link();
+    $('pv').textContent = n || ' '; $('out').textContent = u;
+    $('wa').href = 'https://wa.me/?text=' + encodeURIComponent(u); $('open').href = u;
+    ['copy', 'wa', 'open'].forEach(id => $(id).setAttribute('aria-disabled', String(!n))); };
+  $('nm').addEventListener('input', update); $('set').addEventListener('change', update);
+  $('copy').addEventListener('click', async () => { const u = link();
+    try { await navigator.clipboard.writeText(u); }
+    catch (e) { const t = document.createElement('textarea'); t.value = u; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    $('copy').textContent = 'Copied'; setTimeout(() => { $('copy').textContent = 'Copy link'; }, 1600); });
+  update();
+})();
+</script>
+</body></html>
